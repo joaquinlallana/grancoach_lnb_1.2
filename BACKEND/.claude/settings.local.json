@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:www.api-basketball.com)",
+      "WebSearch",
+      "WebFetch(domain:rapidapi.com)",
+      "Bash(node -c src/services/ProgressiveStatsLoaderService.js)",
+      "Bash(node -c src/controllers/GameweekController.js)",
+      "Bash(node -c src/repositories/GameweekRepository.js)",
+      "Bash(npm list *)",
+      "Bash(timeout 15 npm run dev)",
+      "Bash(psql -U postgres grancoach_lnb -c \"\\\\dt\")",
+      "WebFetch(domain:www.pickandroll.com.ar)",
+      "Bash(curl -s -L -o C:/temp/lnb_stats.html \"http://www.pickandroll.com.ar/basquet/adc/liga-a/24-25/estadisticas/?fase=fase-regular&opci=acumuladas&modo=puntos\" -w \"HTTP_CODE:%{http_code}\\\\nSIZE:%{size_download}\\\\n\")",
+      "Bash(mkdir -p /tmp/lnb)",
+      "Bash(curl -s -L -A \"Mozilla/5.0 \\(Windows NT 10.0; Win64; x64\\) AppleWebKit/537.36 \\(KHTML, like Gecko\\) Chrome/120.0.0.0 Safari/537.36\" -o /tmp/lnb/stats.html \"http://www.pickandroll.com.ar/basquet/adc/liga-a/24-25/estadisticas/?fase=fase-regular&opci=acumuladas&modo=puntos\" -w \"HTTP:%{http_code} SIZE:%{size_download}\\\\n\")",
+      "Read(//tmp/lnb/**)",
+      "Bash(curl -s -L -A \"Mozilla/5.0\" -o /tmp/lnb/jornada.html \"http://www.pickandroll.com.ar/basquet/adc/liga-a/24-25/estadisticas/?fase=fase-regular&opci=jornada&modo=puntos&mes=202410&dia=07\" -w \"HTTP:%{http_code} SIZE:%{size_download}\\\\n\")",
+      "Bash(curl -s -L -A \"Mozilla/5.0\" -o /tmp/lnb/destacados.html \"http://www.pickandroll.com.ar/basquet/adc/liga-a/24-25/estadisticas/?fase=fase-regular&opci=destacados&modo=puntos\" -w \"HTTP:%{http_code} SIZE:%{size_download}\\\\n\")",
+      "Bash(curl -s -L -A \"Mozilla/5.0\" -o /tmp/lnb/globales.html \"http://www.pickandroll.com.ar/basquet/adc/liga-a/24-25/estadisticas/?fase=fase-regular&opci=globales&modo=puntos\" -w \"HTTP:%{http_code} SIZE:%{size_download}\\\\n\")",
+      "Bash(curl -s -L -A \"Mozilla/5.0\" -o /tmp/lnb/individuales.html \"http://www.pickandroll.com.ar/basquet/adc/liga-a/24-25/individuales/?opci=destacados&modo=PTS\" -w \"HTTP:%{http_code} SIZE:%{size_download}\\\\n\")",
+      "Bash(curl -s -L -A \"Mozilla/5.0\" -o /tmp/lnb/jugadores.html \"http://www.pickandroll.com.ar/basquet/adc/liga-a/24-25/individuales/?opci=jugadores&modo=PTS\" -w \"HTTP:%{http_code} SIZE:%{size_download}\\\\n\")",
+      "Bash(curl -s -L -A \"Mozilla/5.0\" -o /tmp/lnb/jugador_test.html \"http://www.pickandroll.com.ar/basquet/adc/liga-a/24-25/individuales/?opci=jugadores&modo=PTS&juga=91\" -w \"HTTP:%{http_code} SIZE:%{size_download}\\\\n\")",
+      "Bash(grep -oE \"[0-9]{2}/[0-9]{2}/[0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2}\" /tmp/lnb/jugador_test.html)",
+      "Bash(psql -U postgres grancoach_lnb -c \"\\\\d estadisticas\")",
+      "Bash(PGPASSWORD=postgres psql -U postgres -d grancoach_lnb -h localhost -c \"\\\\d estadisticas\")",
+      "Bash(node scripts/generateRealisticStats.js)",
+      "Bash(node -e \"const {pool} = require\\('./src/config/database'\\); pool.query\\(\\\\\"SELECT column_name FROM information_schema.columns WHERE table_name='jugadores' ORDER BY ordinal_position\\\\\"\\).then\\(r => { console.log\\(r.rows.map\\(x => x.column_name\\).join\\('\\\\n'\\)\\); pool.end\\(\\); }\\)\")",
+      "Bash(node -e \"require\\('dotenv'\\).config\\(\\); const {pool} = require\\('./src/config/database'\\); pool.query\\(\\\\\"SELECT column_name FROM information_schema.columns WHERE table_name='jugadores' ORDER BY ordinal_position\\\\\"\\).then\\(r => { console.log\\(r.rows.map\\(x => x.column_name\\).join\\(','\\)\\); pool.end\\(\\); }\\)\")",
+      "Bash(node -e ' *)"
+    ]
+  }
+}
