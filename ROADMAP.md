@@ -1,7 +1,7 @@
 # Roadmap — Fantasy LNB
 
-**Estado actual (2026-05-10):** Backend MVP **completo**. Frontend MVP **completo y jugable**. Auditoría completa con 11 bugs corregidos.
-**Próximo objetivo:** Elevar cobertura de tests automatizados + datos reales (posiciones/precios) antes de features avanzadas.
+**Estado actual (2026-05-10):** Backend MVP **completo**. Frontend MVP **completo y jugable**. Auditoría completa con 11 bugs corregidos. **102 tests automatizados passing**.
+**Próximo objetivo:** Datos reales (posiciones/precios) + tests de ScoringService + E2E frontend.
 
 ---
 
@@ -11,7 +11,7 @@
 2. [Fase 1 — Backend MVP ✅ COMPLETADA](#fase-1--backend-mvp--completada)
 3. [Fase 2.1 — Frontend MVP ✅ COMPLETADA](#fase-21--frontend-mvp--completada)
 4. [Fase 2.2 — Auditoría completa ✅ COMPLETADA](#fase-22--auditoría-completa--completada)
-5. [Fase 2.3 — Tests + Datos reales (en curso)](#fase-23--tests--datos-reales-en-curso)
+5. [Fase 2.3 — Tests + Datos reales](#fase-23--tests--datos-reales)
 6. [Fase 3 — Pulido + Producción](#fase-3--pulido--producción)
 7. [Problemas conocidos](#problemas-conocidos)
 8. [Timeline estimado](#timeline-estimado)
@@ -120,17 +120,20 @@ Bugs resueltos por capa:
 
 ---
 
-## Fase 2.3 — Tests + Datos reales (en curso)
+## Fase 2.3 — Tests + Datos reales
 
-### 2.3.1 Tests 🔴 PENDIENTE
+### 2.3.1 Tests ✅ PARCIALMENTE COMPLETADO
 
-Target: 80% coverage backend. Hoy: solo `auth.test.js`.
+**102 tests passing — 5 suites** (ver [DOCUMENTACION_TESTS.md](../DOCUMENTACION_TESTS.md)).
 
-- [ ] `BACKEND/tests/market.test.js` — buy, sell, transfer, validaciones (presupuesto, mercado cerrado, límites, **penalizaciones correctas con `>`**).
-- [ ] `BACKEND/tests/lineup.test.js` — titular/suplente, capitán único, capitán titular, mínimo 1 titular.
-- [ ] `BACKEND/tests/scoring.test.js` — multiplicadores, penalizaciones, ranking.
-- [ ] `BACKEND/tests/admin.test.js` — autorización (rutas POST/PATCH gameweeks rechazan no-admin).
-- [ ] `BACKEND/tests/integration.test.js` — flujo end-to-end con DB de testing.
+- [x] `BACKEND/tests/auth.test.js` — registro, login, health (8 tests).
+- [x] `BACKEND/tests/market.test.js` — buy, sell, transfer, penalizaciones (34 tests).
+- [x] `BACKEND/tests/lineup.test.js` — capitán, alineación mínima, validaciones HTTP (20 tests).
+- [x] `BACKEND/tests/gameweeks.test.js` — isAdmin en 8 rutas de jornadas (24 tests).
+- [x] `BACKEND/tests/errorHandler.test.js` — mapeo PG→HTTP, createError (17 tests).
+- [ ] `BACKEND/tests/scoring.test.js` — multiplicadores (×2 capitán, ×1 titular, ×0.5 suplente), penalizaciones, ranking. Requiere mocks más complejos de vistas SQL.
+- [ ] `BACKEND/tests/integration.test.js` — flujo end-to-end con DB de testing real.
+- [ ] Frontend E2E — Playwright o Cypress (requiere DB con datos sembrados).
 - [ ] `FRONTEND` — Vitest + React Testing Library para componentes críticos (PlayerCard, LineupGrid, useAuth).
 - [ ] E2E con Playwright (registro → comprar → lineup → ranking).
 
@@ -198,9 +201,9 @@ api-basketball.com no expone posiciones detalladas para la LNB; todos los jugado
 
 Hoy hay un precio default por posición (~$9M para Base). Sin variación, no hay decisión estratégica real al armar plantilla. **Solución sugerida:** asignación manual o cálculo basado en stats agregadas.
 
-### Cobertura de tests baja
+### Cobertura de tests — ScoringService y E2E pendientes
 
-Solo `auth.test.js`. Riesgo alto de regresiones al tocar `MarketService`, `ScoringService` o las vistas SQL. Ver §2.3.1.
+`MarketService`, `LineupService` y rutas admin ya están cubiertos (102 tests). Faltan `ScoringService` (vistas SQL) y tests E2E frontend. Riesgo medio de regresiones al tocar las vistas de puntuación.
 
 ### Cuota de api-basketball
 
@@ -215,7 +218,7 @@ Plan free: 100 req/día y 10 req/min. Una sincronización completa de stats (38 
 | **1** | Backend MVP, sync, admin, jornadas, stats | ~3 semanas | ✅ Completada |
 | **2.1** | Frontend MVP (auth + dashboard + mercado + ranking) | 2-3 semanas | ✅ Completada |
 | **2.2** | Auditoría completa + fix de bugs | 1 semana | ✅ Completada (2026-05-10) |
-| **2.3.1** | Tests críticos (80% coverage) | 1 semana | 🔴 Pendiente |
+| **2.3.1** | Tests backend (102 passing, falta scoring+E2E) | 1 semana | 🟡 Parcial (2026-05-10) |
 | **2.3.2** | Posiciones/precios | 2-3 días | 🔴 Pendiente |
 | **2.3.3** | Swagger | 1 día | 🟡 Opcional |
 | **3** | Notificaciones, ligas, UI mejorada, deploy | 2-3 semanas | 🔴 Futuro |

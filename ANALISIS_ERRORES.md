@@ -1,23 +1,24 @@
 # 🔴 ANÁLISIS DE ERRORES — AUDITORÍA COMPLETA
 
 > **Última actualización:** 2026-05-10
-> **Versión:** 1.2 (post-auditoría completa backend + frontend)
-> **Resultado global:** ✅ **9/9 bugs resueltos** — el juego es jugable end-to-end.
+> **Versión:** 1.3 (post-auditoría completa + suite de tests automatizados)
+> **Resultado global:** ✅ **11/11 bugs resueltos** — **102/102 tests passing** — el juego es jugable end-to-end.
 
 ---
 
 ## Resumen ejecutivo
 
-Se realizaron **dos auditorías**:
+Se realizaron **tres fases**:
 
 1. **Auditoría inicial (v1.0):** identificó 7 bugs críticos en backend (lógica de negocio).
-2. **Auditoría 2026-05-10 (v1.2):** verificó la auditoría inicial y descubrió **2 bugs nuevos** (1 backend, 1 seguridad rutas) y **2 mejoras de UX en frontend**.
+2. **Auditoría 2026-05-10 (v1.2):** verificó la auditoría inicial y descubrió **4 bugs nuevos** (1 lógica, 1 seguridad rutas, 2 UX frontend). Total: 11 bugs.
+3. **Suite de tests (v1.3):** 102 tests automatizados que cubren todos los bugs resueltos y previenen regresiones futuras.
 
-| Capa | Bugs originales | Bugs nuevos detectados | Estado |
-|------|-----------------|------------------------|--------|
-| Backend (lógica) | 7 | 1 (changePassword) | ✅ TODOS RESUELTOS |
-| Backend (seguridad) | 0 | 1 (rutas gameweeks sin isAdmin) | ✅ RESUELTO |
-| Frontend (UX) | 0 | 2 (PlayerCard, token expirado) | ✅ RESUELTOS |
+| Capa | Bugs originales | Bugs nuevos (v1.2) | Estado | Tests que lo cubren |
+|------|-----------------|---------------------|--------|---------------------|
+| Backend (lógica) | 7 | 1 (changePassword) | ✅ RESUELTOS | market, lineup, auth |
+| Backend (seguridad) | 0 | 1 (rutas gameweeks sin isAdmin) | ✅ RESUELTO | gameweeks (8 casos) |
+| Frontend (UX) | 0 | 2 (PlayerCard, token expirado) | ✅ RESUELTOS | manual (no unit-testeable sin DOM) |
 
 ---
 
@@ -190,31 +191,21 @@ Si el usuario dejaba el campo "Nombre del equipo" vacío, se enviaba `nombreEqui
 
 ---
 
-## 🧪 TESTS RECOMENDADOS (PENDIENTE)
+## 🧪 TESTS AUTOMATIZADOS (✅ IMPLEMENTADOS — v1.3)
 
-```javascript
-// Backend
-describe('MarketService - Transfer Penalties', () => {
-  test('1ra y 2da transferencia libres, 3ra penalizada', async () => { /* ... */ });
-});
+Suite completa: **102 tests passing, 0 fallos**. Ver [DOCUMENTACION_TESTS.md](./DOCUMENTACION_TESTS.md) para descripción detallada de cada test.
 
-describe('LineupService', () => {
-  test('Rechaza si todos suplentes', async () => { /* ... */ });
-  test('Rechaza si capitán no es titular', async () => { /* ... */ });
-});
+| Suite | Archivo | Tests | Qué bug/regla cubre |
+|-------|---------|-------|---------------------|
+| Auth | `tests/auth.test.js` | 8 | Registro/login/health |
+| Market | `tests/market.test.js` | 34 | Bugs 1, 3, 4, 6 + penalizaciones |
+| Lineup | `tests/lineup.test.js` | 20 | Bug 2 + validaciones HTTP |
+| Gameweeks | `tests/gameweeks.test.js` | 24 | Bug 8 (isAdmin en 8 rutas) |
+| ErrorHandler | `tests/errorHandler.test.js` | 17 | Mapeo PG→HTTP, createError |
 
-describe('Gameweeks routes', () => {
-  test('POST / sin es_admin devuelve 403', async () => { /* ... */ });
-});
+**Los tests de penalización** (`[PENALIZACIÓN]` count=0,1,2,3) son los más importantes: verifican directamente los parámetros del `INSERT INTO transferencias` para confirmar que el fix `>=` → `>` funciona correctamente con cada caso posible.
 
-// Frontend
-describe('PlayerCard', () => {
-  test('Botón muestra "Cerrado" si mercado bloqueado', () => { /* ... */ });
-  test('Botón muestra "Sin fondos" si no canAfford', () => { /* ... */ });
-});
-```
-
-Hoy solo existe `BACKEND/tests/auth.test.js`. La cobertura de tests es la deuda principal para la próxima iteración (ver [ROADMAP.md](./ROADMAP.md) §2.2).
+**El bug de `resetAllMocks()` encontrado durante el testing:** `clearAllMocks()` no limpia la cola de `mockReturnValueOnce` entre tests. Esto podría haber causado que tests "pasaran por razones equivocadas". Se corrigió usando `resetAllMocks()` en todos los archivos.
 
 ---
 

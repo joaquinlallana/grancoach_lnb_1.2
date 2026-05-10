@@ -1,7 +1,7 @@
-# 🎯 RESUMEN EJECUTIVO — GRAN COACH LNB v1.2
+# 🎯 RESUMEN EJECUTIVO — GRAN COACH LNB v1.3
 
-> **Última auditoría:** 2026-05-10
-> **Estado del proyecto:** ✅ **JUGABLE END-TO-END** (backend + frontend MVP completo)
+> **Última actualización:** 2026-05-10
+> **Estado del proyecto:** ✅ **JUGABLE END-TO-END** (backend + frontend MVP + 102 tests)
 
 ---
 
@@ -9,12 +9,12 @@
 
 ```
 ┌────────────────────────────────────────────────────────────┐
-│                  FANTASY LNB v1.2                          │
+│                  FANTASY LNB v1.3                          │
 ├────────────────────────────────────────────────────────────┤
 │  ✅ Backend Express + PostgreSQL    100% jugable          │
 │  ✅ Frontend React + Vite           100% jugable          │
 │  ✅ 11 bugs corregidos              0 críticos abiertos   │
-│  ⚠️  Tests: solo auth.test.js       (deuda principal)     │
+│  ✅ Tests: 102/102 passing          5 suites              │
 │  ⚠️  Datos: posiciones/precios      genéricos por default │
 └────────────────────────────────────────────────────────────┘
 ```
@@ -25,31 +25,31 @@
 
 ### 🔴 BACKEND — Lógica de negocio crítica (7)
 
-| # | Bug | Archivo | Severidad |
-|---|-----|---------|-----------|
-| 1 | Penalización transferencias `>=` → `>` | MarketService.js | 🔴 CRÍTICO |
-| 2 | Validación de alineación mínima | LineupService.js | 🔴 CRÍTICO |
-| 3 | Transacción `transferPlayer` blindada | MarketService.js | 🟠 ALTO |
-| 4 | Jornada activa obligatoria | MarketService.js | 🟠 ALTO |
-| 5 | Doble fetch `changePassword` consolidado | AuthService.js | 🟡 MEDIO |
-| 6 | Validación de presupuesto con mensaje claro | MarketService.js | 🟡 MEDIO |
-| 7 | Orden de validaciones en lineup | FantasyTeamRepository.js | 🟡 BAJO |
+| # | Bug | Archivo | Severidad | Test que lo verifica |
+|---|-----|---------|-----------|---------------------|
+| 1 | Penalización transferencias `>=` → `>` | MarketService.js | 🔴 CRÍTICO | `market.test.js` — 4 casos `[PENALIZACIÓN]` |
+| 2 | Validación de alineación mínima | LineupService.js | 🔴 CRÍTICO | `lineup.test.js` — capitán suplente, todos suplentes |
+| 3 | Transacción `transferPlayer` blindada | MarketService.js | 🟠 ALTO | `market.test.js` — 404/409/422 en transfer |
+| 4 | Jornada activa obligatoria | MarketService.js | 🟠 ALTO | `market.test.js` — `400 sin jornada activa` ×3 |
+| 5 | Doble fetch `changePassword` consolidado | AuthService.js | 🟡 MEDIO | `auth.test.js` (flujo indirecto) |
+| 6 | Validación de presupuesto con mensaje claro | MarketService.js | 🟡 MEDIO | `market.test.js` — `422 presupuesto insuficiente` ×2 |
+| 7 | Orden de validaciones en lineup | FantasyTeamRepository.js | 🟡 BAJO | `lineup.test.js` — `404 jugador no pertenece` |
 
 ### 🟠 BACKEND — Seguridad (1)
 
-| # | Bug | Archivo | Severidad |
-|---|-----|---------|-----------|
-| 8 | Rutas POST/PATCH de `/api/gameweeks` ahora requieren `isAdmin` | routes/gameweeks.js | 🟠 ALTO |
+| # | Bug | Archivo | Severidad | Test que lo verifica |
+|---|-----|---------|-----------|---------------------|
+| 8 | Rutas POST/PATCH de `/api/gameweeks` sin `isAdmin` | routes/gameweeks.js | 🟠 ALTO | `gameweeks.test.js` — `403` en 8 rutas distintas |
 
 > **Antes**, cualquier usuario autenticado podía crear/editar jornadas, partidos y stats. **Ahora** solo admins.
 
 ### 🟡 FRONTEND — UX y robustez (3)
 
-| # | Bug | Archivo | Severidad |
-|---|-----|---------|-----------|
-| 9 | Token JWT expirado se detecta pre-request (no en 401) | api/axios.js | 🟡 MEDIO |
-| 10 | `PlayerCard` distingue "Cerrado" vs "Sin fondos" | components/market/PlayerCard.jsx | 🟢 BAJO |
-| 11 | `Register` normaliza `nombreEquipo` vacío | pages/Register.jsx | 🟢 BAJO |
+| # | Bug | Archivo | Severidad | Verificación |
+|---|-----|---------|-----------|--------------|
+| 9 | Token JWT expirado detectado pre-request | api/axios.js | 🟡 MEDIO | Manual (requiere DOM) |
+| 10 | `PlayerCard` distingue "Cerrado" vs "Sin fondos" | components/market/PlayerCard.jsx | 🟢 BAJO | Manual |
+| 11 | `Register` normaliza `nombreEquipo` vacío | pages/Register.jsx | 🟢 BAJO | Manual |
 
 ---
 
@@ -116,18 +116,38 @@ GRAN COACH LNB 1.2/
 │   ├── .env.example
 │   └── README.md
 │
-├── ANALISIS_ERRORES.md         Detalle de los 11 bugs
+├── ANALISIS_ERRORES.md         Detalle de los 11 bugs + estado de tests
 ├── RESUMEN_EJECUTIVO.md        Este archivo
 ├── ROADMAP.md                  Plan de iteraciones
+├── DOCUMENTACION_TESTS.md      Descripción de los 102 tests automatizados
 └── SOLUCION_IMPLEMENTADA.md    Guía de los fixes originales
 ```
+
+---
+
+## 🧪 TESTS AUTOMATIZADOS (v1.3)
+
+```
+npm test   →   102 tests, 5 suites, 0 fallos
+```
+
+| Suite | Tests | Cobertura principal |
+|-------|-------|---------------------|
+| `auth.test.js` | 8 | Registro, login, health |
+| `market.test.js` | 34 | Buy/sell/transfer + lógica de penalizaciones |
+| `lineup.test.js` | 20 | Alineación, capitán, validaciones HTTP |
+| `gameweeks.test.js` | 24 | Control de acceso admin (8 rutas protegidas) |
+| `errorHandler.test.js` | 17 | Mapeo PG→HTTP, createError, errores genéricos |
+
+Ver [DOCUMENTACION_TESTS.md](./DOCUMENTACION_TESTS.md) para descripción completa de cada test.
 
 ---
 
 ## ⚠️ DEUDA TÉCNICA RESTANTE
 
 ### Alta prioridad
-- 🔴 **Tests automatizados:** solo `auth.test.js` cubierto. Falta cubrir `MarketService`, `LineupService`, `ScoringService`, rutas admin.
+- 🟡 **Tests de ScoringService:** las vistas SQL de puntuación no están cubiertas todavía (requieren DB real o mocks más complejos).
+- 🟡 **Tests E2E frontend:** Playwright o Cypress para validar el flujo completo en el navegador.
 
 ### Media prioridad
 - 🟡 **Posiciones y precios reales:** los jugadores sincronizados desde api-basketball.com quedan con `posicion='base'` y precio fijo. Necesita asignación manual o heurística por stats.
