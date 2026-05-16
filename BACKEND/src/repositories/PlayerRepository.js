@@ -119,6 +119,16 @@ class PlayerRepository {
     return result.rows[0] || null;
   }
 
+  async findByIds(ids) {
+    if (!ids || ids.length === 0) return [];
+    const placeholders = ids.map((_, i) => `$${i + 1}`).join(', ');
+    const result = await query(
+      `SELECT id, nombre, posicion FROM jugadores WHERE id IN (${placeholders})`,
+      ids
+    );
+    return result.rows;
+  }
+
   async getRosterCount(equipoFantasyId) {
     const result = await query(
       'SELECT COUNT(*) FROM equipo_fantasy_jugadores WHERE equipo_fantasy_id = $1',

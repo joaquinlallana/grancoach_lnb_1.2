@@ -1,6 +1,13 @@
 /**
  * Tests para LineupService + rutas /api/fantasy-team/lineup
- * Cubre: validación de capitán único, capitán titular, alineación mínima, player not in team.
+ *
+ * Cubre:
+ *   - Validación de capitán único, capitán debe ser titular.
+ *   - Alineación mínima cuando el plantel está incompleto.
+ *   - Validación estricta de posiciones cuando hay 10 jugadores (Art. II reglamento):
+ *       Titulares: 1 base + 1 escolta + 1 alero + 1 ala-pivot + 1 pivot
+ *       Suplentes: ≥2 perimetrales (B/E/A) + ≥2 internos (AP/P) + 1 comodín
+ *   - Jugador no pertenece al equipo (404).
  */
 
 process.env.JWT_SECRET = 'test-secret-key-for-jest';
@@ -202,15 +209,156 @@ describe('PATCH /api/fantasy-team/lineup — lógica de negocio', () => {
 
   it('200 alineación donde capitán cuenta como titular (sin esTitular explícito)', async () => {
     authAndTeam();
-    // capitán con esTitular no enviado (undefined) → no es false, pero tampoco true
-    // LineupService filtra: c.esTitular === true || c.esCapitan === true
-    // Si esCapitan = true → cuenta como titular
     setupLineupSuccess([{ jugadorId: 1, esCapitan: true }]);
 
     const res = await patchLineup([{ jugadorId: 1, esCapitan: true }]);
     // Puede retornar 400 por validación HTTP (esTitular no enviado, undefined)
     // o 200 si pasa. Lo importante es que no sea 500.
     expect([200, 400]).toContain(res.status);
+  });
+});
+
+// ─── Validación de posiciones (plantel de 10 jugadores, Art. II) ────────────
+
+describe('PATCH /api/fantasy-team/lineup — validación de posiciones (10 jugadores)', () => {
+  /**
+   * Mockea PlayerRepository.findByIds devolviendo las posiciones especificadas.
+   */
+  function mockFindByIds(playersData) {
+    query.mockImplementationOnce((sql) => {
+      // Esta debe ser la query SELECT id, nombre, posicion FROM jugadores WHERE id IN (...)
+      if (sql.includes('FROM jugadores') && sql.includes('IN')) {
+        return Promise.resolve({ rows: playersData });
+      }
+      return Promise.resolve({ rows: [] });
+    });
+  }
+
+  /**
+   * Construye un lineup de 10 jugadores con la composición indicada.
+   * @param {Object} starters - mapeo posición → id, ej: {base: 1, escolta: 2, ...}
+   * @param {Array}  benchPositions - array de posiciones para los 5 suplentes
+   * @param {number} captainId - id del capitán (opcional, default starter base)
+   */
+  function build10(starters, benchPositions, captainId = null) {
+    const lineup = [];
+    const players = [];
+    let nextId = 1;
+
+    // Titulares
+    Object.entries(starters).forEach(([pos, id]) => {
+      lineup.push({ jugadorId: id, esTitular: true, esCapitan: captainId === id });
+      players.push({ id, nombre: `P${id}`, posicion: pos });
+    });
+    // Suplentes
+    benchPositions.forEach((pos) => {
+      const id = nextId++ + 100; // ids del banco empiezan en 101+
+      lineup.push({ jugadorId: id, esTitular: false, esCapitan: false });
+      players.push({ id, nombre: `B${id}`, posicion: pos });
+    });
+
+    return { lineup, players };
+  }
+
+  it('200 alineación válida: 5 titulares (1 c/u) + banco con 2 perim + 2 int + 1 comodín', async () => {
+    authAndTeam();
+    const { lineup, players } = build10(
+      { base: 1, escolta: 2, alero: 3, 'ala-pivot': 4, pivot: 5 },
+      ['base', 'escolta', 'ala-pivot', 'pivot', 'alero'], // 3 perim + 2 int (válido)
+      1
+    );
+    mockFindByIds(players);
+    setupLineupSuccess(lineup);
+
+    const res = await patchLineup(lineup);
+    expect(res.status).toBe(200);
+  });
+
+  it('400 si faltan posiciones en titulares (ej: 2 bases, 0 escoltas)', async () => {
+    authAndTeam();
+    const lineup = [
+      { jugadorId: 1, esTitular: true, esCapitan: true },
+      { jugadorId: 2, esTitular: true, esCapitan: false },
+      { jugadorId: 3, esTitular: true, esCapitan: false },
+      { jugadorId: 4, esTitular: true, esCapitan: false },
+      { jugadorId: 5, esTitular: true, esCapitan: false },
+      { jugadorId: 6, esTitular: false, esCapitan: false },
+      { jugadorId: 7, esTitular: false, esCapitan: false },
+      { jugadorId: 8, esTitular: false, esCapitan: false },
+      { jugadorId: 9, esTitular: false, esCapitan: false },
+      { jugadorId: 10, esTitular: false, esCapitan: false },
+    ];
+    // Titulares: 2 bases, 1 alero, 1 ala-pivot, 1 pivot (FALTA escolta)
+    mockFindByIds([
+      { id: 1, nombre: 'P1', posicion: 'base' },
+      { id: 2, nombre: 'P2', posicion: 'base' },  // duplicado
+      { id: 3, nombre: 'P3', posicion: 'alero' },
+      { id: 4, nombre: 'P4', posicion: 'ala-pivot' },
+      { id: 5, nombre: 'P5', posicion: 'pivot' },
+      { id: 6, nombre: 'B1', posicion: 'base' },
+      { id: 7, nombre: 'B2', posicion: 'escolta' },
+      { id: 8, nombre: 'B3', posicion: 'ala-pivot' },
+      { id: 9, nombre: 'B4', posicion: 'pivot' },
+      { id: 10, nombre: 'B5', posicion: 'alero' },
+    ]);
+
+    const res = await patchLineup(lineup);
+    expect(res.status).toBe(400);
+    // Acepta cualquiera de los dos errores: o "2 bases" detectado primero, o "0 escoltas"
+    expect(res.body.message).toMatch(/base|escolta/i);
+  });
+
+  it('400 si banco tiene menos de 2 perimetrales', async () => {
+    authAndTeam();
+    const { lineup, players } = build10(
+      { base: 1, escolta: 2, alero: 3, 'ala-pivot': 4, pivot: 5 },
+      ['ala-pivot', 'pivot', 'ala-pivot', 'pivot', 'alero'], // solo 1 perim
+      1
+    );
+    mockFindByIds(players);
+    const res = await patchLineup(lineup);
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/2 perimetrales/i);
+  });
+
+  it('400 si banco tiene menos de 2 internos', async () => {
+    authAndTeam();
+    const { lineup, players } = build10(
+      { base: 1, escolta: 2, alero: 3, 'ala-pivot': 4, pivot: 5 },
+      ['base', 'escolta', 'alero', 'base', 'pivot'], // solo 1 interno
+      1
+    );
+    mockFindByIds(players);
+    const res = await patchLineup(lineup);
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/2 internos/i);
+  });
+
+  it('400 si hay más de 5 titulares', async () => {
+    authAndTeam();
+    // 6 titulares + 4 suplentes (plantel completo de 10 jugadores)
+    const lineup = Array.from({ length: 10 }, (_, i) => ({
+      jugadorId: i + 1,
+      esTitular: i < 6,
+      esCapitan: i === 0,
+    }));
+    // No necesitamos mockFindByIds porque la validación de "5 titulares" falla antes
+    const res = await patchLineup(lineup);
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/5 titulares/i);
+  });
+
+  it('200 banco válido: 2 perim + 3 internos (comodín es interno)', async () => {
+    authAndTeam();
+    const { lineup, players } = build10(
+      { base: 1, escolta: 2, alero: 3, 'ala-pivot': 4, pivot: 5 },
+      ['base', 'alero', 'ala-pivot', 'pivot', 'pivot'], // 2 perim + 3 int
+      1
+    );
+    mockFindByIds(players);
+    setupLineupSuccess(lineup);
+    const res = await patchLineup(lineup);
+    expect(res.status).toBe(200);
   });
 });
 

@@ -5,15 +5,41 @@ const TransferRepository = require('../repositories/TransferRepository');
 const GameweekRepository = require('../repositories/GameweekRepository');
 const { createError } = require('../middleware/errorHandler');
 
-// Máximo de transferencias por jornada antes de penalización
-const TRANSFERENCIAS_LIBRES_POR_JORNADA = 1;
+// Transferencias gratuitas por jornada (Art. V del reglamento)
+const TRANSFERENCIAS_LIBRES_POR_JORNADA = 2;
 const PENALIZACION_PUNTOS = 20;
+
+/**
+ * Determina si el equipo está en configuración inicial (nunca jugó una jornada).
+ * En ese caso, sus operaciones de mercado no se penalizan: el usuario está
+ * armando su plantilla por primera vez.
+ */
+async function esConfiguracionInicial(client, equipoFantasyId) {
+  const { rows } = await client.query(
+    `SELECT 1 FROM lineup_snapshots WHERE equipo_fantasy_id = $1 LIMIT 1`,
+    [equipoFantasyId]
+  );
+  return rows.length === 0;
+}
+
+/**
+ * Calcula si una operación debe ser penalizada según la jornada actual
+ * y el historial del equipo.
+ */
+async function debePenalizar(client, equipoFantasyId, jornadaId) {
+  if (await esConfiguracionInicial(client, equipoFantasyId)) return false;
+  const transfersThisWeek = await TransferRepository.countByEquipoAndJornada(equipoFantasyId, jornadaId);
+  return transfersThisWeek > TRANSFERENCIAS_LIBRES_POR_JORNADA;
+}
 
 class MarketService {
   /**
    * Compra un jugador para el equipo del usuario.
    * La DB (trigger controlar_presupuesto) descuenta el precio automáticamente.
    * La DB (trigger bloquear_si_jornada_cerrada) impide cambios si el mercado está cerrado.
+   *
+   * Compras iniciales (equipo sin historial de jornadas jugadas) nunca son penalizadas:
+   * el usuario está armando su plantilla por primera vez.
    */
   async buyPlayer(userId, jugadorId) {
     return withTransaction(async (client) => {
@@ -37,7 +63,7 @@ class MarketService {
         );
       }
 
-      // 4. La DB validará: presupuesto, límite 10 jugadores, máx 3 del mismo equipo LNB,
+      // 5. La DB validará: presupuesto, límite 10 jugadores, máx 3 del mismo equipo LNB,
       //    y si la jornada está bloqueada (via triggers). Si algo falla, la excepción
       //    de PostgreSQL se propagará y el error handler la convertirá en 422.
       const relation = await client.query(
@@ -46,14 +72,13 @@ class MarketService {
         [team.id, jugadorId]
       );
 
-      // 5. Registrar transferencia (sólo entrada, sin jugador que sale)
+      // 6. Registrar transferencia (sólo entrada, sin jugador que sale)
       const jornada = await GameweekRepository.findCurrent();
       if (!jornada) {
         throw createError(400, 'No hay jornada activa. No se pueden hacer transferencias.');
       }
-      
-      const transfersThisWeek = await TransferRepository.countByEquipoAndJornada(team.id, jornada.id);
-      const esPenalizada = transfersThisWeek > TRANSFERENCIAS_LIBRES_POR_JORNADA;
+
+      const esPenalizada = await debePenalizar(client, team.id, jornada.id);
 
       await client.query(
         `INSERT INTO transferencias (equipo_fantasy_id, jugador_sale_id, jugador_entra_id, jornada_id, es_penalizada, penalizacion_puntos)
@@ -93,9 +118,8 @@ class MarketService {
       if (!jornada) {
         throw createError(400, 'No hay jornada activa. No se pueden hacer transferencias.');
       }
-      
-      const transfersThisWeek = await TransferRepository.countByEquipoAndJornada(team.id, jornada.id);
-      const esPenalizada = transfersThisWeek > TRANSFERENCIAS_LIBRES_POR_JORNADA;
+
+      const esPenalizada = await debePenalizar(client, team.id, jornada.id);
 
       await client.query(
         `INSERT INTO transferencias (equipo_fantasy_id, jugador_sale_id, jugador_entra_id, jornada_id, es_penalizada, penalizacion_puntos)
@@ -157,9 +181,8 @@ class MarketService {
       if (!jornada) {
         throw createError(400, 'No hay jornada activa. No se pueden hacer transferencias.');
       }
-      
-      const transfersThisWeek = await TransferRepository.countByEquipoAndJornada(team.id, jornada.id);
-      let esPenalizada = transfersThisWeek > TRANSFERENCIAS_LIBRES_POR_JORNADA;
+
+      const esPenalizada = await debePenalizar(client, team.id, jornada.id);
 
       await client.query(
         `INSERT INTO transferencias (equipo_fantasy_id, jugador_sale_id, jugador_entra_id, jornada_id, es_penalizada, penalizacion_puntos)

@@ -10,6 +10,7 @@ export function useTeam() {
     queryFn: fantasyTeamApi.getTeam,
     enabled: isAuthenticated,
     select: (data) => data.data,
+    refetchOnWindowFocus: false,
   })
 }
 

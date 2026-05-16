@@ -2,7 +2,7 @@
 
 Juego de Fantasy Basketball de la **Liga Nacional de Básquet de Argentina (LNB)**. Cada jugador arma su equipo con jugadores reales, define titulares y capitán, y acumula puntos según las estadísticas de cada jornada.
 
-> **Estado (v1.3 — 2026-05-10):** MVP completo y jugable end-to-end. 11 bugs corregidos. 102 tests automatizados passing.
+> **Estado (v1.3 — 2026-05-15):** MVP completo y jugable end-to-end. **Reglamento oficial aplicado** (Art. II posiciones, Art. V transferencias). 15 bugs corregidos en total. **112 tests automatizados passing**. Posiciones reales asignadas a 365 jugadores. Precios calculados por valoración FIBA real.
 
 ---
 
@@ -42,23 +42,47 @@ Juego de Fantasy Basketball de la **Liga Nacional de Básquet de Argentina (LNB)
 | Titular | ×1 |
 | Suplente | ×0.5 |
 
-**Penalizaciones por transferencias:**
+**Penalizaciones por transferencias (Art. V):**
 - 1ra y 2da transferencia de la jornada: **gratis**
 - 3ra transferencia en adelante: **−20 puntos** por operación
+- **Excepción:** las compras durante la configuración inicial (primera vez que el usuario arma su equipo, sin snapshots previos) **nunca se penalizan**.
 
 ### Límites del equipo
 
 | Regla | Límite |
 |-------|--------|
-| Jugadores en el equipo | máx 10 |
+| Jugadores en el equipo | exactamente 10 |
 | Jugadores del mismo equipo LNB | máx 3 |
-| Titulares | máx 5 |
-| Suplentes | máx 5 |
-| Capitanes | exactamente 1 (si se asigna) |
+| Titulares | exactamente 5 (uno por cada posición) |
+| Suplentes | exactamente 5 (2 perimetrales + 2 internos + 1 comodín) |
+| Capitanes | exactamente 1 (si se asigna), debe ser titular |
 
-### Estadísticas que generan puntos
+### Composición de la alineación (Art. II del reglamento)
 
-Las vistas SQL calculan puntos según: **puntos anotados, rebotes, asistencias, robos, tapas, pérdidas y faltas** de cada jugador en cada partido. El backend solo consulta — no calcula.
+**Titulares (5 jugadores, aportan 100% de su puntaje):**
+- 1 Base (B)
+- 1 Escolta (E)
+- 1 Alero (A)
+- 1 Ala-Pivot (AP)
+- 1 Pivot (P)
+
+**Suplentes (5 jugadores, aportan 50% de su puntaje):**
+- 2 Perimetrales: configuración libre entre Base, Escolta o Alero
+- 2 Internos: configuración libre entre Ala-Pivot o Pivot
+- 1 Comodín: cualquier posición
+
+### Estadísticas que generan puntos (Art. IV — Matriz de puntuación)
+
+| Atributo positivo | Valor | Atributo negativo | Valor |
+|---|---|---|---|
+| Punto anotado | +1.0 | Pérdida de balón | −1.0 |
+| Rebote (Of. o Def.) | +1.2 | Tiro de campo fallado | −0.5 |
+| Asistencia | +1.5 | Tiro libre fallado | −2.0 |
+| Robo de balón | +2.0 | | |
+| Tapa / Bloqueo | +2.0 | | |
+| Triple convertido | +0.5 (bono adicional) | | |
+
+El puntaje semanal de cada jugador se calcula como **promedio de sus partidos en la jornada**, luego se multiplica según su rol (titular/suplente/capitán). Las vistas SQL realizan todo el cálculo automáticamente.
 
 ---
 
@@ -357,6 +381,21 @@ cd BACKEND
 node scripts/generateRealisticStats.js
 ```
 
+### Scripts de mantenimiento (v1.3)
+
+```bash
+# Asigna posiciones reales (base/escolta/alero/ala-pivot/pivot) a los 365 jugadores LNB
+# Fuente: latinbasket.com + investigación manual
+node BACKEND/src/scripts/updatePlayerPositions.js [--dry-run]
+
+# Recalcula precios desde la tabla `estadisticas` real (valoración FIBA promedio)
+# Fórmula: precio = CLAMP(1_000_000 + valoracion * 800_000, 6_500_000, 18_000_000)
+node BACKEND/src/scripts/updatePricesFromDB.js [--dry-run]
+
+# Script de respaldo si no hay stats sincronizadas (datos estimados 2023-24)
+node BACKEND/src/scripts/updatePlayerPrices.js [--dry-run]
+```
+
 ### Avanzar jornadas (testing / desarrollo)
 
 ```bash
@@ -533,13 +572,13 @@ cd BACKEND
 npm test
 ```
 
-**Resultado:** 102 tests, 5 suites, 0 fallos.
+**Resultado:** 112 tests, 5 suites, 0 fallos.
 
 | Suite | Tests | Qué cubre |
 |-------|-------|-----------|
 | `auth.test.js` | 8 | Registro, login, validaciones, health |
-| `market.test.js` | 34 | Compra, venta, transfer, penalizaciones |
-| `lineup.test.js` | 20 | Capitán, alineación mínima, validaciones HTTP |
+| `market.test.js` | 38 | Compra, venta, transfer, penalizaciones, configuración inicial |
+| `lineup.test.js` | 26 | Capitán, alineación mínima, **validación de posiciones (Art. II)** |
 | `gameweeks.test.js` | 24 | Acceso admin en 8 rutas de jornadas |
 | `errorHandler.test.js` | 17 | Mapeo errores PG → HTTP, createError |
 
@@ -551,10 +590,11 @@ Ver [DOCUMENTACION_TESTS.md](./DOCUMENTACION_TESTS.md) para descripción de cada
 
 | Archivo | Descripción |
 |---------|-------------|
+| [Reglamento Oficial- GranCoachLNB.txt](./Reglamento%20Oficial-%20GranCoachLNB.txt) | **Reglamento oficial del juego** — Art. I franquicia, Art. II posiciones, Art. IV puntuación, Art. V transferencias |
 | [BACKEND/README.md](./BACKEND/README.md) | Guía completa del backend: endpoints, flujos, setup, producción |
 | [FRONTEND/README.md](./FRONTEND/README.md) | Guía del frontend: stack, estructura, auth, setup |
-| [ANALISIS_ERRORES.md](./ANALISIS_ERRORES.md) | 11 bugs detectados y resueltos, con el test que verifica cada uno |
-| [DOCUMENTACION_TESTS.md](./DOCUMENTACION_TESTS.md) | Descripción individual de los 102 tests automatizados |
+| [ANALISIS_ERRORES.md](./ANALISIS_ERRORES.md) | 11 bugs originales + 4 nuevos detectados y resueltos en v1.3 |
+| [DOCUMENTACION_TESTS.md](./DOCUMENTACION_TESTS.md) | Descripción individual de los 112 tests automatizados |
 | [RESUMEN_EJECUTIVO.md](./RESUMEN_EJECUTIVO.md) | Estado del proyecto, métricas, deuda técnica |
 | [ROADMAP.md](./ROADMAP.md) | Plan de iteraciones: completado, en curso, futuro |
 | [SOLUCION_IMPLEMENTADA.md](./SOLUCION_IMPLEMENTADA.md) | Detalle técnico de los fixes de lógica de negocio |

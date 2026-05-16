@@ -1,7 +1,7 @@
 # 🧪 DOCUMENTACIÓN DE TESTS — GRAN COACH LNB
 
-> **Última actualización:** 2026-05-10
-> **Estado:** ✅ 102/102 tests passing — 5 suites, 0 fallos
+> **Última actualización:** 2026-05-15
+> **Estado:** ✅ 112/112 tests passing — 5 suites, 0 fallos
 > **Comando:** `cd BACKEND && npm test`
 > **Estrategia:** Tests unitarios e integración con DB mockeada (`jest.mock`)
 
@@ -12,11 +12,11 @@
 | Suite | Archivo | Tests | Descripción |
 |-------|---------|-------|-------------|
 | Auth | `tests/auth.test.js` | 8 | Registro, login, health check |
-| Market | `tests/market.test.js` | 34 | Compra, venta, transferencia, penalizaciones |
-| Lineup | `tests/lineup.test.js` | 20 | Alineación, capitán, validaciones |
+| Market | `tests/market.test.js` | 38 | Compra, venta, transferencia, penalizaciones, **configuración inicial** |
+| Lineup | `tests/lineup.test.js` | 26 | Alineación, capitán, **validación de posiciones según reglamento** |
 | Gameweeks | `tests/gameweeks.test.js` | 24 | Control de acceso admin en rutas de jornadas |
 | ErrorHandler | `tests/errorHandler.test.js` | 17 | Manejo de errores PostgreSQL y de negocio |
-| **TOTAL** | — | **102** | — |
+| **TOTAL** | — | **112** | +10 tests respecto a v1.2 |
 
 ---
 
@@ -66,10 +66,13 @@ Tests del mercado de jugadores: compra (`buyPlayer`), venta (`sellPlayer`) y tra
 | `422 presupuesto insuficiente` | Simula equipo con $100 de presupuesto y jugador que cuesta $5.000.000. Verifica 422 con mensaje detallado que incluye ambos montos. |
 | `400 sin jornada activa` | Simula ausencia de jornada activa en la DB. Verifica que NO se pueda comprar sin jornada (400). |
 | `201 compra exitosa` | Simula escenario completo exitoso. Verifica 201 con `jugador` y `equipo` en la respuesta. |
-| `[PENALIZACIÓN] 1ra transferencia: count=0 → NO penalizada` | Verifica que con 0 transferencias previas (count=0), `0 > 1 = false`, el INSERT en `transferencias` tenga `esPenalizada=false` y `penalizacion_puntos=0`. |
-| `[PENALIZACIÓN] 2da transferencia: count=1 → NO penalizada (1 > 1 = false)` | Verifica que con 1 transferencia previa (count=1), `1 > 1 = false`, la 2da transferencia sea LIBRE (no penalizada). Este test confirma el fix del bug crítico `>=` → `>`. |
-| `[PENALIZACIÓN] 3ra transferencia: count=2 → SÍ penalizada (2 > 1 = true)` | Verifica que con 2 transferencias previas (count=2), `2 > 1 = true`, el INSERT tenga `esPenalizada=true` y `penalizacion_puntos=20`. |
-| `[PENALIZACIÓN] 4ta transferencia: count=3 → SÍ penalizada` | Verifica que la 4ta transferencia también sea penalizada (−20 pts). |
+| `[PENAL] count=0, con historial → 1ra: NO penalizada` | `0 > 2 = false` con snapshots existentes. |
+| `[PENAL] count=1, con historial → 2da: NO penalizada (1 > 2 = false)` | Verifica la 2da transferencia gratuita del reglamento. |
+| `[PENAL] count=2, con historial → 3ra: NO penalizada (2 > 2 = false)` | Confirma que el umbral es estrictamente `>`, no `>=`. |
+| `[PENAL] count=3, con historial → 4ta: SÍ penalizada (3 > 2 = true)` | Primera transferencia penalizada (-20 pts). Refleja Art. V del reglamento (2 gratis). |
+| `[PENAL] count=10, con historial → SÍ penalizada` | Verifica que se aplique a transferencias muy extras. |
+| `[CONFIG INICIAL] sin snapshots → NUNCA penaliza` | Equipo recién creado sin `lineup_snapshots` puede comprar todos los jugadores sin penalización. Fix del bug donde armar plantilla inicial penalizaba a partir de la 3ra compra. |
+| `[CONFIG INICIAL] sin snapshots → no consulta el contador` | Optimización: ni siquiera ejecuta la query de count. |
 
 ### DELETE /api/market/sell/:jugadorId
 
@@ -79,8 +82,9 @@ Tests del mercado de jugadores: compra (`buyPlayer`), venta (`sellPlayer`) y tra
 | `404 jugador no en equipo` | Simula venta de jugador que no está en el equipo del usuario. Verifica 404. |
 | `400 sin jornada activa` | Verifica que no se pueda vender sin jornada activa (400). |
 | `200 venta exitosa` | Simula escenario completo exitoso. Verifica 200 con mensaje "Jugador vendido exitosamente". |
-| `[PENALIZACIÓN] sell: count=1 → NO penalizada (1 > 1 = false)` | Verifica que la 2da venta del período sea libre (count=1 → no penalizada). |
-| `[PENALIZACIÓN] sell: count=2 → SÍ penalizada (2 > 1 = true)` | Verifica que la 3ra operación del período sea penalizada (−20 pts en el INSERT). |
+| `[PENAL] sell count=2 → NO penalizada (2 > 2 = false)` | Verifica que las 3 primeras operaciones del período sean libres (2 gratis + la actual). |
+| `[PENAL] sell count=3 → SÍ penalizada (3 > 2 = true)` | Confirma penalización −20 pts a partir de la 4ta operación. |
+| `[CONFIG INICIAL] sell sin snapshots → NO penaliza` | Aplica también al método sell: configuración inicial nunca penaliza. |
 
 ### POST /api/market/transfer
 
@@ -96,8 +100,9 @@ Tests del mercado de jugadores: compra (`buyPlayer`), venta (`sellPlayer`) y tra
 | `422 sin presupuesto para el fichaje` | Simula equipo con $100 intentando fichar un jugador de $10M. Verifica 422 con mensaje detallado. |
 | `400 sin jornada activa` | Verifica que la transferencia directa tampoco funcione sin jornada activa. |
 | `200 transferencia exitosa` | Simula escenario completo exitoso. Verifica 200 con mensaje "Transferencia realizada exitosamente". |
-| `[PENALIZACIÓN] transfer count=1 → NO penalizada en respuesta` | Verifica que la respuesta de `transferPlayer` incluya `penalizada: false` y `penalizacion: 0` cuando count=1. |
-| `[PENALIZACIÓN] transfer count=2 → SÍ penalizada en respuesta (-20 pts)` | Verifica que la respuesta incluya `penalizada: true` y `penalizacion: 20` cuando count=2. |
+| `[PENAL] transfer count=2 → NO penalizada en respuesta` | Respuesta `penalizada: false`, `penalizacion: 0`. |
+| `[PENAL] transfer count=3 → SÍ penalizada en respuesta (-20 pts)` | Respuesta `penalizada: true`, `penalizacion: 20`. |
+| `[CONFIG INICIAL] transfer sin snapshots → NO penaliza` | Configuración inicial aplica también al endpoint transfer. |
 
 ### GET /api/market/players (público)
 
@@ -140,6 +145,17 @@ Tests de gestión de alineación y equipo fantasy. Cubre validaciones HTTP del c
 | `200 alineación válida: 5 titulares + 1 capitán` | Simula alineación correcta (el capitán es titular). Verifica 200 y que la transacción sea completada. |
 | `200 alineación válida: solo 1 titular sin capitán explícito` | Verifica que se pueda guardar una alineación sin capitán (no es obligatorio). |
 | `200 alineación donde capitán cuenta como titular (sin esTitular explícito)` | Verifica comportamiento cuando `esCapitan: true` pero `esTitular` no se envía; no debe arrojar 500. |
+
+### PATCH /api/fantasy-team/lineup — validación de posiciones (10 jugadores, Art. II reglamento)
+
+| Test | Descripción |
+|------|-------------|
+| `200 alineación válida: 5 titulares (1 c/u) + banco con 2 perim + 2 int + 1 comodín` | Caso feliz: titulares con 1 base, 1 escolta, 1 alero, 1 ala-pivot, 1 pivot; banco con 3 perimetrales + 2 internos. |
+| `400 si faltan posiciones en titulares (ej: 2 bases, 0 escoltas)` | Verifica que el servicio rechace formaciones con posición duplicada o faltante. |
+| `400 si banco tiene menos de 2 perimetrales` | Validación de banco: necesita ≥2 perimetrales (B/E/A). |
+| `400 si banco tiene menos de 2 internos` | Validación de banco: necesita ≥2 internos (AP/P). |
+| `400 si hay más de 5 titulares` | El reglamento permite exactamente 5 titulares. |
+| `200 banco válido: 2 perim + 3 internos (comodín es interno)` | El comodín puede ser cualquier posición; con 3 internos en el banco también es válido. |
 
 ### PATCH /api/fantasy-team/nombre
 
@@ -315,10 +331,13 @@ Para `transferPlayer`, la respuesta HTTP incluye directamente `{ penalizada, pen
 
 | Regla | Test que la cubre |
 |-------|-------------------|
-| 1ra y 2da transferencia libre por jornada | `[PENALIZACIÓN] count=0` y `count=1 → NO penalizada` |
-| 3ra+ transferencia: −20 pts | `[PENALIZACIÓN] count=2/3 → SÍ penalizada` |
+| 2 transferencias libres por jornada (Art. V) | `[PENAL] count=0, 1, 2 → NO penalizada` |
+| 3ra+ transferencia: −20 pts (Art. V) | `[PENAL] count=3, 10 → SÍ penalizada` |
+| **Configuración inicial sin penalización** | `[CONFIG INICIAL] sin snapshots → NO penaliza` (buy/sell/transfer) |
 | Capitán único y titular | `400 si hay más de un capitán` / `400 si el capitán es suplente` |
-| Alineación mínima (al menos 1 titular) | `400 si todos son suplentes` |
+| Alineación mínima cuando plantel incompleto | `400 si todos son suplentes` |
+| **Posiciones titular (Art. II): 1 B + 1 E + 1 A + 1 AP + 1 P** | Tests de validación de posiciones (5+1 en titulares por 5 posiciones) |
+| **Banco (Art. II): ≥2 perimetrales + ≥2 internos** | `400 si banco tiene <2 perim` / `<2 int` |
 | Presupuesto validado antes del INSERT | `422 presupuesto insuficiente` |
 | Jornada activa obligatoria para operar | `400 sin jornada activa` (buy, sell, transfer) |
 | Rutas admin protegidas por `isAdmin` | Toda la suite de gameweeks (403 en 8 rutas distintas) |

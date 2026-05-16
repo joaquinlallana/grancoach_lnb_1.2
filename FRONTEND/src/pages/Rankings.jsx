@@ -14,8 +14,8 @@ export function Rankings() {
   const { data: gameweek } = useCurrentGameweek()
 
   const rows = data?.ranking || []
-  const total = data?.pagination?.total || 0
-  const totalPages = Math.ceil(total / limit)
+  const total = data?.total ?? data?.pagination?.total ?? 0
+  const totalPages = data?.totalPages ?? Math.ceil(total / limit)
 
   return (
     <div className="space-y-6">

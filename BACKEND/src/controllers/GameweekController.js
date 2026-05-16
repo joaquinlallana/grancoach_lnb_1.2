@@ -196,25 +196,28 @@ class GameweekController {
         });
       }
 
-      // Marcar como cerrada
-      const updated = await GameweekRepository.update(current.id, { cerrada: true });
+      // Captura el snapshot de alineaciones Y cierra la jornada (la DB function hace ambas cosas)
+      await GameweekRepository.capturarLineupSnapshot(current.id);
+
+      // Obtener datos actualizados de la jornada cerrada
+      const updated = await GameweekRepository.findById(current.id);
 
       // Obtener la siguiente jornada (automáticamente es la próxima no cerrada)
-      const next = await GameweekRepository.findCurrent();
+      const nextGameweek = await GameweekRepository.findCurrent();
 
       return res.json({
         success: true,
-        message: `Jornada ${current.numero} cerrada. Jornada ${next?.numero || 'ninguna'} ahora actual.`,
+        message: `Jornada ${current.numero} cerrada. Jornada ${nextGameweek?.numero || 'ninguna'} ahora actual.`,
         closedGameweek: {
           id: updated.id,
           numero: updated.numero,
-          cerrada: true,
+          cerrada: updated.cerrada,
         },
-        currentGameweek: next ? {
-          id: next.id,
-          numero: next.numero,
-          fechaInicio: next.fecha_inicio,
-          fechaFin: next.fecha_fin,
+        currentGameweek: nextGameweek ? {
+          id: nextGameweek.id,
+          numero: nextGameweek.numero,
+          fechaInicio: nextGameweek.fecha_inicio,
+          fechaFin: nextGameweek.fecha_fin,
         } : null,
       });
     } catch (error) {

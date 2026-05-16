@@ -1,24 +1,26 @@
 # 🔴 ANÁLISIS DE ERRORES — AUDITORÍA COMPLETA
 
-> **Última actualización:** 2026-05-10
-> **Versión:** 1.3 (post-auditoría completa + suite de tests automatizados)
-> **Resultado global:** ✅ **11/11 bugs resueltos** — **102/102 tests passing** — el juego es jugable end-to-end.
+> **Última actualización:** 2026-05-15
+> **Versión:** 1.3 (post-reglamento oficial + tests ampliados)
+> **Resultado global:** ✅ **15/15 bugs resueltos** — **112/112 tests passing** — el juego es jugable end-to-end y respeta el reglamento oficial.
 
 ---
 
 ## Resumen ejecutivo
 
-Se realizaron **tres fases**:
+Se realizaron **cuatro fases**:
 
 1. **Auditoría inicial (v1.0):** identificó 7 bugs críticos en backend (lógica de negocio).
 2. **Auditoría 2026-05-10 (v1.2):** verificó la auditoría inicial y descubrió **4 bugs nuevos** (1 lógica, 1 seguridad rutas, 2 UX frontend). Total: 11 bugs.
-3. **Suite de tests (v1.3):** 102 tests automatizados que cubren todos los bugs resueltos y previenen regresiones futuras.
+3. **Suite de tests inicial (v1.3 alpha):** 102 tests automatizados.
+4. **Reglamento oficial + bugs ranking (v1.3 — 2026-05-15):** **4 bugs adicionales** corregidos al aplicar el reglamento oficial. Total: 15 bugs. **112 tests passing**.
 
-| Capa | Bugs originales | Bugs nuevos (v1.2) | Estado | Tests que lo cubren |
-|------|-----------------|---------------------|--------|---------------------|
-| Backend (lógica) | 7 | 1 (changePassword) | ✅ RESUELTOS | market, lineup, auth |
-| Backend (seguridad) | 0 | 1 (rutas gameweeks sin isAdmin) | ✅ RESUELTO | gameweeks (8 casos) |
-| Frontend (UX) | 0 | 2 (PlayerCard, token expirado) | ✅ RESUELTOS | manual (no unit-testeable sin DOM) |
+| Capa | Originales | Auditoría 2026-05-10 | v1.3 (2026-05-15) | Estado | Tests |
+|------|-----------|---------------------|-------------------|--------|-------|
+| Backend (lógica) | 7 | 1 (changePassword) | 2 (config inicial, umbral transferencias) | ✅ RESUELTOS | market, lineup, auth |
+| Backend (seguridad) | 0 | 1 (rutas gameweeks sin isAdmin) | 0 | ✅ RESUELTO | gameweeks (8 casos) |
+| Backend (datos) | 0 | 0 | 1 (posiciones todas como base) | ✅ RESUELTO | script updatePlayerPositions |
+| Frontend (UX) | 0 | 2 (PlayerCard, token expirado) | 1 (ranking campos mismatched) | ✅ RESUELTOS | manual |
 
 ---
 
@@ -198,14 +200,71 @@ Suite completa: **102 tests passing, 0 fallos**. Ver [DOCUMENTACION_TESTS.md](./
 | Suite | Archivo | Tests | Qué bug/regla cubre |
 |-------|---------|-------|---------------------|
 | Auth | `tests/auth.test.js` | 8 | Registro/login/health |
-| Market | `tests/market.test.js` | 34 | Bugs 1, 3, 4, 6 + penalizaciones |
-| Lineup | `tests/lineup.test.js` | 20 | Bug 2 + validaciones HTTP |
+| Market | `tests/market.test.js` | 38 | Bugs 1, 3, 4, 6 + penalizaciones + **bug 12 (config inicial)** |
+| Lineup | `tests/lineup.test.js` | 26 | Bug 2 + validaciones HTTP + **Art. II posiciones** |
 | Gameweeks | `tests/gameweeks.test.js` | 24 | Bug 8 (isAdmin en 8 rutas) |
 | ErrorHandler | `tests/errorHandler.test.js` | 17 | Mapeo PG→HTTP, createError |
 
-**Los tests de penalización** (`[PENALIZACIÓN]` count=0,1,2,3) son los más importantes: verifican directamente los parámetros del `INSERT INTO transferencias` para confirmar que el fix `>=` → `>` funciona correctamente con cada caso posible.
+**Los tests de penalización** (`[PENAL]` count=0,1,2,3,10) son los más importantes: verifican directamente los parámetros del `INSERT INTO transferencias` para confirmar que el umbral funciona correctamente y que la configuración inicial no penaliza.
 
 **El bug de `resetAllMocks()` encontrado durante el testing:** `clearAllMocks()` no limpia la cola de `mockReturnValueOnce` entre tests. Esto podría haber causado que tests "pasaran por razones equivocadas". Se corrigió usando `resetAllMocks()` en todos los archivos.
+
+---
+
+## 🆕 BUGS RESUELTOS EN v1.3 (2026-05-15)
+
+### ✅ BUG 12 — Penalización al armar plantilla inicial
+
+**Archivo:** `BACKEND/src/services/MarketService.js`
+**Severidad:** 🔴 CRÍTICO — afecta a TODOS los usuarios nuevos.
+
+**Problema:** Cuando un usuario se registra y compra sus primeros 10 jugadores, las compras 3, 4, ..., 10 quedaban marcadas como "penalizadas" porque exceden las 2 transferencias gratuitas de la jornada. Resultado: nuevos usuarios empezaban con −160 puntos antes de jugar nada.
+
+**Solución:** Detectar "configuración inicial" mirando la tabla `lineup_snapshots`. Si el equipo nunca jugó una jornada (sin snapshots), ninguna operación de mercado se penaliza. Helper `debePenalizar()` aplicado consistentemente en `buyPlayer`, `sellPlayer` y `transferPlayer`.
+
+**Tests:** `[CONFIG INICIAL]` en market.test.js (4 tests).
+
+### ✅ BUG 13 — Umbral de transferencias gratuitas: 1 en vez de 2 (Art. V del reglamento)
+
+**Archivo:** `BACKEND/src/services/MarketService.js`
+**Severidad:** 🟡 MEDIO — desviación del reglamento oficial.
+
+**Problema:** El código tenía `TRANSFERENCIAS_LIBRES_POR_JORNADA = 1`, pero el reglamento oficial (Art. V) especifica **2 transferencias gratuitas por semana**.
+
+**Solución:** Cambiar la constante a `2`. El umbral pasa de `> 1` a `> 2` automáticamente. UI del frontend actualizada ("2 transferencias gratis por jornada").
+
+**Tests:** Todos los `[PENAL] count=N` actualizados en market.test.js.
+
+### ✅ BUG 14 — Ranking sin datos visibles (mismatched field names)
+
+**Archivos:** `FRONTEND/src/components/rankings/RankingTable.jsx`, `FRONTEND/src/pages/Rankings.jsx`
+**Severidad:** 🟡 MEDIO — UI funcional pero datos vacíos.
+
+**Problema:** El componente leía `row.nombre_equipo`, `row.nombre_usuario`, `row.total_puntos` pero el backend (vista SQL `ranking_general_completo`) devuelve `equipo_nombre`, `usuario`, `puntos_totales`. Además `Rankings.jsx` leía `data.pagination.total` pero el backend devuelve `data.total` directamente.
+
+**Solución:** Soportar ambos nombres con `??` para retro-compatibilidad. Backend no se modificó.
+
+### ✅ BUG 15 — Posiciones todas asignadas como "base"
+
+**Archivos:** Tabla `jugadores` en la DB + `BACKEND/src/scripts/updatePlayerPositions.js`
+**Severidad:** 🟡 MEDIO — bloquea filtros por posición y validación del lineup.
+
+**Problema:** api-basketball.com devuelve solo 3 categorías (Guard/Forward/Center). La sincronización mapeaba la mayoría como "base" por defecto, dejando la distribución desproporcionada (277 base, 72 alero, 16 pivot, 0 escolta, 0 ala-pivot).
+
+**Solución:** Script `updatePlayerPositions.js` con mapping manual de 365 jugadores investigados en latinbasket.com. Distribución final: 101 aleros / 92 bases / 82 escoltas / 49 ala-pivots / 41 pivots.
+
+---
+
+## 📋 BUGS DE REGLAMENTO RESUELTOS EN v1.3
+
+Al aplicar el [Reglamento Oficial](Reglamento%20Oficial-%20GranCoachLNB.txt) (2026-05-15), se identificaron y resolvieron las siguientes desviaciones:
+
+| Art. del reglamento | Especificación | Implementación previa | Fix aplicado |
+|---|---|---|---|
+| **Art. II — Titulares** | 1 Base, 1 Escolta, 1 Alero, 1 Ala-Pivot, 1 Pivot | Cualquier combinación de 5 titulares | LineupService valida estricta cuando el plantel tiene 10 jugadores |
+| **Art. II — Suplentes** | 2 perimetrales + 2 internos + 1 comodín | Cualquier combinación de 5 suplentes | LineupService valida ≥2 perim y ≥2 int |
+| **Art. V — Transferencias** | 2 gratis por semana | Solo 1 gratis | `TRANSFERENCIAS_LIBRES_POR_JORNADA = 2` |
+| **Art. V — Configuración inicial** | (implícito: armar plantilla no es transferencia) | Cada compra inicial se contaba | `debePenalizar()` retorna `false` si no hay snapshots |
 
 ---
 
@@ -215,6 +274,7 @@ Suite completa: **102 tests passing, 0 fallos**. Ver [DOCUMENTACION_TESTS.md](./
 - Misma estructura de respuestas HTTP.
 - Mensajes de error más descriptivos (no rompen clientes existentes).
 - Las validaciones nuevas devuelven 4xx con mensaje claro (antes devolvían 5xx genéricos).
+- Bug 14 (ranking): el frontend lee con `??` ambos nombres, retro-compatible con backend anterior.
 
 ✅ **No se modificó el schema de la base de datos** en esta auditoría.
 

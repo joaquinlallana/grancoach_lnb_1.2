@@ -37,13 +37,13 @@ export function RankingTable({ rows = [] }) {
                 </td>
                 <td className="py-3 pr-4">
                   <span className={`font-medium ${isMe ? 'text-brand-400' : 'text-white'}`}>
-                    {row.nombre_equipo}
+                    {row.equipo_nombre || row.nombre_equipo}
                   </span>
                   {isMe && <span className="ml-2 text-xs text-brand-500">(tú)</span>}
                 </td>
-                <td className="py-3 pr-4 text-gray-400">{row.nombre_usuario}</td>
+                <td className="py-3 pr-4 text-gray-400">{row.usuario || row.nombre_usuario}</td>
                 <td className="py-3 pr-4 text-right font-bold text-white">
-                  {Number(row.total_puntos || 0).toFixed(1)}
+                  {Number(row.puntos_totales ?? row.total_puntos ?? 0).toFixed(1)}
                 </td>
                 <td className="py-3 text-right text-gray-400">
                   {row.presupuesto_restante != null ? fmt(row.presupuesto_restante) : '—'}
