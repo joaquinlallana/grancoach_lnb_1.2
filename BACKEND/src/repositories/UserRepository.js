@@ -61,6 +61,13 @@ class UserRepository {
   async deactivate(userId) {
     await query('UPDATE usuarios SET activo = false WHERE id = $1', [userId]);
   }
+
+  async findAllActive() {
+    const result = await query(
+      'SELECT id, nombre, email FROM usuarios WHERE activo = true ORDER BY id'
+    );
+    return result.rows;
+  }
 }
 
 module.exports = new UserRepository();

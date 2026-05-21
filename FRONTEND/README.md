@@ -2,7 +2,7 @@
 
 Single-page application del juego de Fantasy Basketball de la Liga Nacional de Básquet (LNB Argentina). Consume la API REST en [`../BACKEND`](../BACKEND).
 
-> **Estado:** MVP completo y jugable end-to-end (login/register, dashboard, mercado, alineación, rankings, panel admin). Auditado y corregido el 2026-05-10. Ver [`../ANALISIS_ERRORES.md`](../ANALISIS_ERRORES.md).
+> **Estado (v1.4 — 2026-05-21):** MVP completo y jugable end-to-end (login/register, dashboard, mercado con filtro por URL, **vista táctica de cancha con drag-and-drop**, rankings, panel admin). Auditado y corregido el 2026-05-10 + iteraciones v1.3/v1.4. Ver [`../ANALISIS_ERRORES.md`](../ANALISIS_ERRORES.md) y [`../ROADMAP.md`](../ROADMAP.md#fase-25--ux-táctica--smart-buy--emails-v14--completada).
 
 ---
 
@@ -16,6 +16,7 @@ Single-page application del juego de Fantasy Basketball de la Liga Nacional de B
 - **HTTP:** Axios (con interceptores para JWT y manejo de 401/expiración)
 - **Forms:** React Hook Form 7
 - **UI:** TailwindCSS 3 + Lucide icons
+- **Drag-and-drop:** `@dnd-kit/core` + `@dnd-kit/utilities` (CourtView en Mi Equipo)
 - **Notificaciones:** react-hot-toast
 
 ---
@@ -43,15 +44,15 @@ src/
 │   ├── ui/                     Button, Card, Badge, Spinner, EmptyState
 │   ├── layout/                 Navbar, Layout, PrivateRoute, AdminRoute
 │   ├── market/                 PlayerCard, PlayerFilters, BudgetBar
-│   ├── team/                   RosterPlayer, LineupGrid
+│   ├── team/                   CourtView (cancha + DnD), PlayerChip, LineupGrid (legacy)
 │   └── rankings/               RankingTable
 ├── pages/
 │   ├── Landing.jsx             Home pública
 │   ├── Login.jsx
 │   ├── Register.jsx
 │   ├── Dashboard.jsx           Resumen del usuario
-│   ├── Market.jsx              Mercado con filtros, paginación, compra/venta
-│   ├── MyTeam.jsx              Roster + drag-toggle de titular/capitán
+│   ├── Market.jsx              Mercado con filtros (lee `?posicion=` de URL), paginación, compra/venta
+│   ├── MyTeam.jsx              Cancha + DnD + normalización defensiva + venta inline
 │   ├── Rankings.jsx            Ranking global con paginación
 │   ├── PlayerDetail.jsx        Stats + puntos fantasy del jugador
 │   └── Admin.jsx               Panel admin (sync, advance gameweek)
@@ -97,19 +98,30 @@ npm run preview  # sirve dist/ localmente para verificar
 
 ## Flujo del usuario (MVP jugable)
 
-1. **Registro** → `/register` (crea usuario + equipo fantasy con $100M).
+1. **Registro** → `/register` (crea usuario + equipo fantasy con $100M). Si SMTP está habilitado en backend → email de bienvenida.
 2. **Dashboard** → resumen: presupuesto, ranking actual, jornada vigente, últimos puntajes.
-3. **Mercado** (`/market`) → filtrar por posición/equipo LNB/búsqueda. Comprar hasta 10 jugadores (máx 3 del mismo equipo LNB).
-4. **Mi Equipo** (`/team`) → marcar 5 titulares + 1 capitán (×2 puntos), 5 suplentes (×0.5 puntos). El sistema valida que haya al menos 1 titular o capitán.
-5. **Cierre de jornada** → cuando admin avanza la jornada (`/admin`), el mercado se bloquea, se calculan puntos y se actualiza el ranking.
-6. **Rankings** (`/rankings`) → ver tu posición global y la de los demás equipos.
+3. **Mercado** (`/market`) → filtrar por posición/equipo LNB/búsqueda. Comprar hasta 10 jugadores (máx 3 del mismo equipo LNB). El **backend decide** si el nuevo jugador entra como titular (si hay cupo y la posición está libre) o como suplente. El toast confirma la ubicación.
+4. **Mi Equipo** (`/team`) → vista de **media-cancha con drag-and-drop**. Banco fijo a la izquierda; 5 slots posicionales en la cancha. Arrastrar entre banco y cancha mueve/intercambia jugadores. Botones inline: capitán (×2 puntos), vender. Slots vacíos llevan al mercado con el filtro de la posición pre-aplicado.
+5. **Cierre de jornada** → cuando admin avanza la jornada (`/admin`), el mercado se bloquea, se calculan puntos y se actualiza el ranking. Email a todos los usuarios activos notificando el cambio de ventana.
+6. **Rankings** (`/rankings`) → ver tu posición global y la de los demás equipos. Email semanal con el resumen (Lunes 00:00 UTC).
+
+### Vista de Mi Equipo (CourtView)
+
+La página de equipo usa `FRONTEND/src/components/team/CourtView.jsx` que reemplazó al `LineupGrid` listado. Características:
+
+- **Drag-and-drop** con `@dnd-kit`: arrastrar un suplente al slot de su posición lo asciende. Si el slot ya está ocupado, hace un **swap atómico** (titular ↔ suplente). Validación de posición al soltar con feedback de error (toast).
+- **PointerSensor** con `activationConstraint: { distance: 6 }` para que los clicks en botones (capitán, vender) no inicien drag.
+- **Chip compacto**: muestra el apellido + posición + acciones. El tooltip on-hover muestra nombre completo, equipo LNB, precio y puntos promedio.
+- **Capitán** marcado con corona dorada (`text-yellow-400` + `fill="currentColor"`) y `ring-2 ring-yellow-400` en el chip completo.
+- **Normalización defensiva**: al cargar el equipo, si la DB tiene >5 titulares o duplicados de posición (legado de bugs previos), los excedentes pasan al banco y se muestra un toast pidiendo guardar.
+- **Slot vacío = botón "Comprar"**: `<button onClick={() => navigate('/market?posicion=alero')}>`. El `Market.jsx` lee `?posicion=` con `useSearchParams` y arranca con el filtro aplicado.
 
 ### Reglas del juego
 
 - 💰 Presupuesto: $100M iniciales.
 - 👑 Capitán: ×2 puntos. Solo 1 capitán y debe ser titular.
 - ⭐ Titular: ×1 punto. Suplente: ×0.5 punto.
-- 🔄 1 transferencia gratis por jornada. A partir de la 2da: −20 puntos de penalización.
+- 🔄 2 transferencias gratis por jornada (Art. V). A partir de la 3ra: −20 puntos por operación. Las compras durante la configuración inicial nunca penalizan.
 - 🔒 Mercado se cierra al lock de cada jornada (configurable, default: 4 días antes del inicio).
 
 ---
@@ -156,7 +168,10 @@ Ver [`../ROADMAP.md`](../ROADMAP.md) para la lista completa. Resumen:
 - 🟡 Tests E2E (Playwright o Cypress).
 - 🟡 Histórico de puntos por jornada con gráficos.
 - 🟡 Comparativa head-to-head entre usuarios.
-- 🟡 Mobile-first refinement.
+- 🟡 Mobile-first refinement (la cancha lateral compite con el banco en < 480px).
+- 🟡 Drag-and-drop también dentro del banco (reordenar suplentes).
+- 🟡 Recuperar contraseña (el sistema de email ya está, falta el endpoint).
+- 🟡 Opt-out granular de emails desde `/profile`.
 
 ---
 

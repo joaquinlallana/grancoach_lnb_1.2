@@ -91,6 +91,17 @@ if (require.main === module) {
     console.log(`✅ Fantasy LNB API corriendo en http://localhost:${PORT}`);
     console.log(`📊 Entorno: ${process.env.NODE_ENV || 'development'}`);
 
+    // Iniciar cron job de envío de emails fin de semana
+    if (process.env.EMAILS_ENABLED === 'true') {
+      console.log(`📧 Iniciando cron job de emails fin de semana...`);
+      try {
+        const { scheduleWeekendRankingEmail } = require('./cron/emailScheduler');
+        scheduleWeekendRankingEmail();
+      } catch (error) {
+        console.error(`[EmailScheduler] Error al inicializar:`, error.message);
+      }
+    }
+
     // Iniciar cron job de carga de estadísticas si está habilitado
     if (process.env.TESTING_CRON === 'true') {
       console.log(`🔄 Iniciando cron job de carga progresiva de estadísticas...`);

@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const UserRepository = require('../repositories/UserRepository');
+const EmailService = require('./EmailService');
 const { createError } = require('../middleware/errorHandler');
 
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '12');
@@ -23,15 +24,18 @@ class AuthService {
       nombreEquipo: teamName,
     });
 
+    // Send welcome email (fire and forget)
+    EmailService.sendWelcome(user, team.nombre).catch(console.error);
+
     const token = this._generateToken(user.id, user.es_admin || false);
 
     return {
       token,
-      user: { 
-        id: user.id, 
-        nombre: user.nombre, 
+      user: {
+        id: user.id,
+        nombre: user.nombre,
         email: user.email,
-        es_admin: user.es_admin || false 
+        es_admin: user.es_admin || false
       },
       equipo: { id: team.id, nombre: team.nombre, presupuesto: team.presupuesto_restante },
     };

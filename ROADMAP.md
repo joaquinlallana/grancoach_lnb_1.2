@@ -1,7 +1,7 @@
 # Roadmap — Fantasy LNB
 
-**Estado actual (2026-05-15):** Backend MVP **completo**. Frontend MVP **completo y jugable**. Auditoría completa con 11 bugs corregidos en la auditoría original + 4 bugs adicionales corregidos en la v1.3. **Reglamento oficial aplicado** (Art. II posiciones, Art. V transferencias). **112 tests automatizados passing**. **365 jugadores con posiciones reales** y precios calculados por valoración real (FIBA EFF) de la temporada 2024-25 (sincronizada vía api-basketball).
-**Próximo objetivo:** ScoringService tests + E2E frontend + deploy.
+**Estado actual (2026-05-21):** Backend MVP **completo**. Frontend MVP **completo y jugable** con **vista táctica de cancha + drag-and-drop**. **Smart-buy backend** (asignación automática titular/banco). **Sistema de emails** (bienvenida, mercado, lineup, apertura/cierre de ventana, ranking semanal). **Reglamento oficial aplicado** (Art. II posiciones, Art. V transferencias). **112 tests automatizados passing**. **365 jugadores con posiciones reales** y precios calculados por valoración real (FIBA EFF).
+**Próximo objetivo:** Configurar SMTP en producción + tests E2E + ScoringService tests + deploy.
 
 ---
 
@@ -13,10 +13,12 @@
 4. [Fase 2.2 — Auditoría completa ✅ COMPLETADA](#fase-22--auditoría-completa--completada)
 5. [Fase 2.3 — Tests + Datos reales](#fase-23--tests--datos-reales)
 6. [Fase 2.4 — Reglamento oficial v1.3 ✅ COMPLETADA](#fase-24--reglamento-oficial-v13--completada)
-7. [Fase 3 — Pulido + Producción](#fase-3--pulido--producción)
-8. [Problemas conocidos](#problemas-conocidos)
-9. [Timeline estimado](#timeline-estimado)
-10. [Criterios de éxito](#criterios-de-éxito-mvp-jugable)
+7. [Fase 2.5 — UX táctica + Smart-buy + Emails v1.4 ✅ COMPLETADA](#fase-25--ux-táctica--smart-buy--emails-v14--completada)
+8. [Fase 3 — Pulido + Producción](#fase-3--pulido--producción)
+9. [Problemas conocidos](#problemas-conocidos)
+10. [Timeline estimado](#timeline-estimado)
+11. [Criterios de éxito](#criterios-de-éxito-mvp-jugable)
+12. [Camino al lanzamiento](#camino-al-lanzamiento)
 
 ---
 
@@ -34,13 +36,21 @@ El **backend** y el **frontend** ya tienen todo lo necesario para que el juego s
 ✅ **Precios basados en valoración FIBA real** (datos de la tabla `estadisticas` poblada desde api-basketball).
 ✅ Sincronización con api-basketball (rate-limited, plan free).
 ✅ Panel admin (sync, advance-week) con permisos `es_admin` correctamente verificados.
+✅ **Smart-buy backend (v1.4)**: cada compra entra como titular si hay cupo y la posición está libre; si no, va al banco automáticamente. El frontend informa la ubicación en el toast.
+✅ **Vista táctica de cancha (v1.4)**: media-cancha con slots por posición, drag-and-drop con `@dnd-kit` para mover jugadores entre titular ↔ banco, validación de posición al soltar, swap atómico cuando el slot destino está ocupado.
+✅ **Notificaciones email (v1.4, nodemailer)**: bienvenida, cambios de mercado (compra/venta/transferencia), actualización de lineup, apertura/cierre de ventana de transferencias, y resumen semanal de ranking (cron Lunes 00:00 UTC). Activado por flag `EMAILS_ENABLED`.
+✅ **Normalización defensiva en frontend**: equipos rotos con >5 titulares o duplicados de posición se auto-arreglan al cargar Mi Equipo (excedentes pasan al banco + toast pidiendo guardar).
+✅ **Slots vacíos accionables**: cada slot sin jugador es un botón que lleva a `/market?posicion=<pos>` con el filtro pre-aplicado.
 
 **Lo que falta para "production-ready":**
 
-1. **Tests de ScoringService** — falta cubrir las vistas SQL (×2, ×1, ×0.5, penalizaciones acumuladas).
-2. **Tests E2E frontend** — Playwright/Cypress con DB sembrada.
-3. **Documentación API (Swagger)** — útil para integradores.
-4. **Deploy + monitorización** — Render/Vercel + Sentry.
+1. **SMTP de producción** — definir proveedor (SES/SendGrid/Mailgun/Postmark) y setear credenciales.
+2. **Tests de ScoringService** — falta cubrir las vistas SQL (×2, ×1, ×0.5, penalizaciones acumuladas).
+3. **Tests E2E frontend** — Playwright/Cypress con DB sembrada.
+4. **Documentación API (Swagger)** — útil para integradores.
+5. **Deploy + monitorización** — Render/Vercel + Sentry/Better Stack.
+6. **Cron real de stats** — reemplazar `TESTING_CRON` por un cron diario en producción.
+7. **Migración de datos** para equipos existentes (auto-normalize ya cubre la mayoría de los casos al cargar).
 
 ---
 
@@ -184,11 +194,91 @@ Realizada el **2026-05-15** tras la publicación del [Reglamento Oficial](Reglam
 
 ---
 
+## Fase 2.5 — UX táctica + Smart-buy + Emails v1.4 ✅ COMPLETADA
+
+Realizada el **2026-05-21**. Iteración de jugabilidad guiada por feedback de usuario.
+
+### Cambios principales
+
+**Vista táctica de cancha** (reemplaza `LineupGrid` por `CourtView`):
+- [x] Media-cancha SVG stylized (paint + aro + tablero + arco de 3pt). Diseño simplificado tras varias iteraciones para priorizar claridad sobre realismo FIBA.
+- [x] 5 slots posicionales sobre la cancha (Base abajo, Pivot arriba, Alero izq, Escolta der, Ala-Pivot zona alta).
+- [x] Banco como columna izquierda fija (no más scroll vertical).
+- [x] Chip de jugador compacto: apellido + posición + acciones (capitán, vender). Nombre completo, equipo, precio y puntos en el tooltip on-hover.
+- [x] Capitán con corona dorada visible + ring amarillo en el chip.
+- [x] **Drag-and-drop con `@dnd-kit`**: arrastrar entre banco y cancha. Valida posición al soltar. Si el slot destino está ocupado, hace **swap atómico** entre los dos jugadores (mismo posición). `PointerSensor` con `activationConstraint: { distance: 6 }` evita conflictos con clicks en botones.
+- [x] Botón de venta en cada chip (confirma antes de ejecutar).
+- [x] **Slots vacíos = botón "Comprar"** con icono de carrito → `navigate('/market?posicion=<pos>')`. El Market lee `?posicion=` de URL al inicializar filtros.
+
+**Smart-buy en backend** (`MarketService.buyPlayer`):
+- [x] Antes del INSERT consulta el roster actual y decide `es_titular`:
+  - Hay 5 titulares → suplente
+  - Ya hay un titular de la misma posición → suplente
+  - Caso contrario → titular
+- [x] Devuelve `esTitular` en el response; el hook `useBuyPlayer` muestra "agregado como titular ⭐" o "suplente 🪑".
+- [x] Eliminado el workaround anterior en `useBuyPlayer` (que hacía `updateLineup` después de cada compra).
+- [x] Tests de market actualizados (`setupBuy` ahora mockea la query del roster). **112 tests siguen passing.**
+
+**Normalización defensiva al cargar Mi Equipo** (`MyTeam.jsx` → `normalizeLineup`):
+- [x] Garantiza máx 1 titular por posición y máx 5 titulares.
+- [x] Si la DB tiene un equipo en estado inválido (por bugs previos), los excedentes pasan al banco y se muestra un toast pidiendo guardar.
+- [x] Resuelve casos como "6/5 titulares con 4 chips visibles" donde antes había jugadores fantasma.
+
+**Sistema de notificaciones email** (`EmailService` + `nodemailer`):
+- [x] `BACKEND/src/services/EmailService.js`: transporter SMTP + 6 plantillas HTML.
+  - `sendWelcome(user, teamName)` — al registrar.
+  - `sendMarketChange(user, tipo, player, penalizada, presupuesto)` — buy/sell/transfer.
+  - `sendLineupUpdate(user)` — al guardar alineación.
+  - `sendWindowOpen(users)` / `sendWindowClose(users)` — al abrir/cerrar jornada.
+  - `sendWeekendRanking(users, generalRanking, weeklyRanking)` — Lunes 00:00 UTC.
+- [x] `BACKEND/src/cron/emailScheduler.js` — cron Lunes 00:00 UTC (Sunday 21:00 ARG).
+- [x] Fire-and-forget en todos los puntos de invocación (no bloquea respuestas HTTP).
+- [x] Activado por flag `EMAILS_ENABLED=true` (en `.env`). Variables SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM, FRONTEND_URL.
+
+### Bugs resueltos en v1.4
+
+1. **Cada compra entraba como titular** → smart-buy.
+2. **Aleros (y otros duplicados) invisibles en el court** — el render por posición solo mostraba el primero. Resuelto con smart-buy + normalización defensiva.
+3. **Counter 6/5 con 4 chips visibles** — consecuencia del bug anterior; resuelto.
+4. **Botón de capitán no funcionaba** — los listeners de drag interceptaban los clicks. Resuelto con `activationConstraint` + `stopPropagation` en el contenedor de botones.
+5. **Icono de corona no cambiaba color al ser capitán** — se aplicaba clase de `bg-*` a un SVG; cambiado a `text-yellow-400` + `fill="currentColor"`.
+6. **Chip del Base se recortaba** — `overflow-hidden` + `top: 85%` lo empujaba fuera. Resuelto con `top: 78%` y removiendo `overflow-hidden`.
+7. **Línea de 3 puntos no concéntrica con el aro** — radio y straight-segments recalculados para que `(200-44)² + (62-26)² = 160²`.
+8. **Filtro de posiciones en Market no funcionaba** — el hook `usePositions` traía valores con casing diferente al de la DB. Hardcodeado.
+9. **Tooltip no mostraba el equipo LNB** — buscaba `nombre_equipo`/`equipo` pero la API devuelve `equipo_nombre`. Añadido al fallback.
+
+### Archivos clave nuevos / modificados
+
+| Archivo | Tipo |
+|---|---|
+| `BACKEND/src/services/EmailService.js` | NUEVO |
+| `BACKEND/src/cron/emailScheduler.js` | NUEVO |
+| `BACKEND/src/services/MarketService.js` | Smart-buy |
+| `BACKEND/src/services/AuthService.js` | Hook de email de bienvenida |
+| `BACKEND/src/services/LineupService.js` | Hook de email de lineup |
+| `BACKEND/src/controllers/GameweekController.js` | Hooks de email window open/close |
+| `BACKEND/src/repositories/UserRepository.js` | `findAllActive()` para emails masivos |
+| `BACKEND/src/repositories/RankingRepository.js` | `getLastClosedWeekRanking()` para email semanal |
+| `BACKEND/.env.example` | SMTP + EMAILS_ENABLED + FRONTEND_URL |
+| `BACKEND/tests/market.test.js` | `setupBuy` mockea query de roster |
+| `FRONTEND/src/components/team/CourtView.jsx` | NUEVO (reemplaza LineupGrid) |
+| `FRONTEND/src/components/team/PlayerChip.jsx` | NUEVO |
+| `FRONTEND/src/pages/MyTeam.jsx` | `normalizeLineup` + handlers swap/sell |
+| `FRONTEND/src/pages/Market.jsx` | Lee `?posicion=` de URL |
+| `FRONTEND/src/hooks/useMarket.js` | `useBuyPlayer` simplificado |
+| `FRONTEND/src/components/market/PlayerFilters.jsx` | Posiciones hardcodeadas |
+| `FRONTEND/package.json` | `@dnd-kit/core`, `@dnd-kit/utilities` |
+
+---
+
 ## Fase 3 — Pulido + Producción
 
-### 3.1 Notificaciones
+### 3.1 Notificaciones ✅ COMPLETADO (v1.4)
 
-- [ ] `nodemailer` para email de bienvenida, confirmación de transferencia, resumen de jornada.
+- [x] `nodemailer` para email de bienvenida, confirmación de mercado, lineup actualizado, apertura/cierre de ventana, resumen semanal de ranking. Activado por `EMAILS_ENABLED=true`.
+- [ ] **Para producción**: definir proveedor SMTP (SES / SendGrid / Mailgun / Postmark) y configurar credenciales reales.
+- [ ] Plantillas HTML responsive más pulidas (las actuales son funcionales pero básicas).
+- [ ] Permitir al usuario opt-out de cada tipo de email desde `/profile`.
 
 ### 3.2 Historial detallado
 
@@ -198,10 +288,13 @@ Realizada el **2026-05-15** tras la publicación del [Reglamento Oficial](Reglam
 
 ### 3.3 UI mejorada
 
-- [ ] Mobile-first refinement, breakpoints (480/768/1024).
+- [x] **Drag-and-drop en Mi Equipo** ✅ (v1.4, `@dnd-kit`).
+- [x] **Vista táctica de cancha** ✅ (v1.4).
+- [x] **Slots vacíos accionables** ✅ (v1.4, llevan a Market con filtro).
+- [ ] Mobile-first refinement de la cancha (en viewports < 480px el banco lateral compite con la cancha).
 - [ ] Comparativa head-to-head entre usuarios.
 - [ ] Dark mode polishing.
-- [ ] Drag-and-drop en LineupGrid para asignar slots.
+- [ ] Drag-and-drop también dentro del banco (reordenar suplentes).
 
 ### 3.4 Ligas privadas
 
@@ -247,8 +340,13 @@ Plan free: 100 req/día y 10 req/min. Una sincronización completa de stats (38 
 | **2.3.1** | Tests backend (112 passing, falta scoring+E2E) | 1 semana | 🟡 Parcial |
 | **2.3.2** | Posiciones/precios reales | 2-3 días | ✅ Completada (2026-05-15) |
 | **2.4** | Reglamento oficial v1.3 aplicado + bugs ranking | 1 día | ✅ Completada (2026-05-15) |
+| **2.5** | UX táctica (cancha + DnD) + Smart-buy + Emails (v1.4) | 1 semana | ✅ Completada (2026-05-21) |
 | **2.3.3** | Swagger | 1 día | 🟡 Opcional |
-| **3** | Notificaciones, ligas, UI mejorada, deploy | 2-3 semanas | 🔴 Futuro |
+| **3.1** | SMTP de producción + opt-out de emails | 2-3 días | 🟡 Pendiente |
+| **3.2** | Historial detallado + gráficos | 1 semana | 🔴 Futuro |
+| **3.3** | UI mejorada (mobile, head-to-head, dark mode) | 1 semana | 🔴 Futuro |
+| **3.4** | Ligas privadas | 1-2 semanas | 🔴 Futuro |
+| **3.5** | Deploy + monitorización + CI/CD | 1 semana | 🔴 Futuro (bloqueante de lanzamiento) |
 
 ---
 
@@ -274,6 +372,55 @@ Plan free: 100 req/día y 10 req/min. Una sincronización completa de stats (38 
 🔴 **Pendiente para "production-ready":**
 1. Tests automatizados con coverage ≥ 80% (faltan ScoringService + E2E).
 2. Deploy + monitorización.
+
+---
+
+## Camino al lanzamiento
+
+### 🟢 Mínimo viable para abrir a usuarios reales (~1-2 semanas)
+
+Bloqueantes reales para lanzar:
+
+1. **Proveedor SMTP en producción** — definir uno (SES, SendGrid, Mailgun, Postmark) y configurar SPF/DKIM/DMARC del dominio. Setear `EMAILS_ENABLED=true` con credenciales reales en el host. Probar deliverability (Gmail, Outlook).
+2. **Deploy del backend** — Render / Railway / Fly.io. Configurar variables de entorno (DB, JWT_SECRET, SMTP, API_BASKETBALL_KEY, CORS_ORIGIN). Habilitar HTTPS.
+3. **Deploy del frontend** — Vercel / Netlify. Setear `VITE_API_URL` apuntando al backend desplegado.
+4. **Cron diario de stats en producción** — reemplazar `TESTING_CRON=true` por un cron real (1 ejecución/día) que llame a `ProgressiveStatsLoaderService` respetando la cuota de api-basketball (100 req/día).
+5. **Monitorización mínima** — Sentry o Better Stack para errores backend/frontend. Logs estructurados (pino/winston).
+6. **Política de privacidad + términos** — texto legal mínimo, link en el footer del Landing y del email de bienvenida.
+
+### 🟡 Mejoras importantes pre-marketing (~2-3 semanas adicionales)
+
+Lo que vale la pena tener antes de hacer campaña/invitar muchos usuarios:
+
+7. **Tests E2E** con Playwright o Cypress (register → buy → lineup → advance-week → ranking) — protege contra regresiones en cada deploy.
+8. **Tests de ScoringService** — cubrir las vistas SQL (×2 capitán, ×1 titular, ×0.5 suplente, penalizaciones acumuladas). Riesgo medio sin esto.
+9. **Mobile-first refinement** — la cancha con banco lateral funciona en desktop pero se aprieta en pantallas < 480px.
+10. **Recuperar contraseña** (`POST /api/auth/forgot-password` + `POST /api/auth/reset-password` con token por email — el sistema de email ya está armado, falta el endpoint).
+11. **Opt-out de emails** desde `/profile` (granular por tipo: bienvenida fija, resto opcional).
+12. **Onboarding del primer login** — tour interactivo con los pasos de "comprar 10 jugadores → armar lineup → esperar la jornada".
+
+### 🔵 Crecimiento (post-launch)
+
+13. **Ligas privadas** (`ligas` + invitaciones + ranking por liga). Es el feature que más engagement genera.
+14. **Comparativa head-to-head** entre dos usuarios (puntajes por jornada lado a lado).
+15. **Historial gráfico** del usuario (evolución de puntos, ranking, presupuesto).
+16. **Notificaciones push** (PWA) — alternativa/complemento al email.
+17. **App mobile nativa** (React Native con el mismo backend) — feature largo plazo.
+18. **Mercado de transferencias entre usuarios** — feature avanzado, requiere rediseño del sistema económico.
+
+### 📋 Checklist de "Día 0" (al hacer el deploy)
+
+- [ ] Backup de la DB de desarrollo (por las dudas).
+- [ ] DB de producción restaurada desde dump limpio + 8 migraciones + 38 jornadas.
+- [ ] Variables de entorno seteadas en el host (no `.env` commiteado).
+- [ ] `JWT_SECRET` regenerado (32+ chars aleatorios, distinto al de dev).
+- [ ] `CORS_ORIGIN` apuntando al dominio final del frontend.
+- [ ] `EMAILS_ENABLED=true` + credenciales SMTP de producción.
+- [ ] Cron diario de stats configurado (no `TESTING_CRON`).
+- [ ] Al menos 1 usuario admin creado (`UPDATE usuarios SET es_admin = true WHERE email = '...';`).
+- [ ] Smoke test manual: register → login → buy → lineup → ver email de bienvenida → admin advance-week → ranking actualizado.
+- [ ] Health check público (`GET /health`) verificado desde fuera del host.
+- [ ] Sentry / Better Stack capturando errores.
 
 ---
 

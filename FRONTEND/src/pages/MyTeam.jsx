@@ -1,11 +1,35 @@
 import { useState, useEffect, useRef } from 'react'
-import { Users, AlertTriangle, Save } from 'lucide-react'
+import { Users, Save, AlertTriangle } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const MAX_STARTERS = 5
 const MAX_BENCH = 5
 const PERIMETRALES = ['base', 'escolta', 'alero']
 const INTERNOS = ['ala-pivot', 'pivot']
+
+/**
+ * Normaliza el lineup: máximo 1 titular por posición, máximo 5 titulares.
+ * Los duplicados/excedentes se mueven al banco automáticamente.
+ * Devuelve { normalizados, cambios } donde `cambios` lista los jugadores movidos.
+ */
+function normalizeLineup(jugadores) {
+  const posTomadas = new Set()
+  let nTitulares = 0
+  const cambios = []
+  const normalizados = jugadores.map((p) => {
+    if (p.es_titular) {
+      if (nTitulares < MAX_STARTERS && !posTomadas.has(p.posicion)) {
+        posTomadas.add(p.posicion)
+        nTitulares++
+        return p
+      }
+      cambios.push(p.nombre)
+      return { ...p, es_titular: false, es_capitan: false }
+    }
+    return p
+  })
+  return { normalizados, cambios }
+}
 
 function validarLineup(players) {
   const titulares = players.filter((p) => p.es_titular)
@@ -29,10 +53,11 @@ function validarLineup(players) {
   return errores.length > 0 ? errores : null
 }
 import { useTeam, useUpdateLineup, useTransfers } from '../hooks/useTeam'
+import { useSellPlayer } from '../hooks/useMarket'
 import { useCurrentGameweek } from '../hooks/useRankings'
-import { LineupGrid } from '../components/team/LineupGrid'
+import { CourtView } from '../components/team/CourtView'
 import { BudgetBar } from '../components/market/BudgetBar'
-import { Card, CardHeader } from '../components/ui/Card'
+import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { PageSpinner } from '../components/ui/Spinner'
 import { EmptyState } from '../components/ui/EmptyState'
@@ -43,6 +68,7 @@ export function MyTeam() {
   const { data: gameweek } = useCurrentGameweek()
   const { data: transfers } = useTransfers()
   const updateLineup = useUpdateLineup()
+  const sellPlayer = useSellPlayer()
 
   const [players, setPlayers] = useState([])
   const [dirty, setDirty] = useState(false)
@@ -56,7 +82,15 @@ export function MyTeam() {
   useEffect(() => {
     // Solo sincroniza con el servidor si no hay cambios pendientes
     if (team?.jugadores && !dirtyRef.current) {
-      setPlayers(team.jugadores)
+      const { normalizados, cambios } = normalizeLineup(team.jugadores)
+      setPlayers(normalizados)
+      if (cambios.length > 0) {
+        toast(
+          `Movimos ${cambios.length} jugador(es) al banco para respetar el reglamento. Guardá los cambios.`,
+          { icon: '⚠️', duration: 5000 }
+        )
+        markDirty(true)
+      }
     }
   }, [team])
 
@@ -103,6 +137,30 @@ export function MyTeam() {
       })
     )
     markDirty(true)
+  }
+
+  // Swap atómico de dos jugadores (intercambia titular ↔ banco)
+  const handleSwapPlayers = (idA, idB) => {
+    if (isLocked) return
+    setPlayers((prev) =>
+      prev.map((p) => {
+        const id = p.jugador_id || p.id
+        if (id === idA || id === idB) {
+          const newTitular = !p.es_titular
+          return { ...p, es_titular: newTitular, es_capitan: newTitular ? p.es_capitan : false }
+        }
+        return p
+      })
+    )
+    markDirty(true)
+  }
+
+  // Vender jugador con confirmación
+  const handleSellPlayer = (jugadorId, nombre) => {
+    if (isLocked) return
+    const confirmar = window.confirm(`¿Seguro que querés vender a ${nombre}? Se devolverá su precio al presupuesto.`)
+    if (!confirmar) return
+    sellPlayer.mutate(jugadorId)
   }
 
   const handleSetCaptain = (jugadorId) => {
@@ -181,14 +239,6 @@ export function MyTeam() {
         </Card>
       )}
 
-      {/* Lineup errors */}
-      {lineupErrors && dirty && (
-        <div className="p-3 rounded-xl bg-red-950/40 border border-red-900 text-red-400 text-xs space-y-1">
-          <p className="font-semibold flex items-center gap-1.5"><AlertTriangle className="h-3.5 w-3.5" /> Formación inválida:</p>
-          {lineupErrors.map((e, i) => <p key={i} className="pl-5">· {e}</p>)}
-        </div>
-      )}
-
       {/* Rules reminder */}
       <div className="grid grid-cols-3 gap-3 text-center text-xs text-gray-500">
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-3">
@@ -215,12 +265,15 @@ export function MyTeam() {
         />
       ) : (
         <Card>
-          <CardHeader title="Plantilla" />
-          <LineupGrid
+          <CourtView
             players={players}
             onToggleStarter={handleToggleStarter}
             onSetCaptain={handleSetCaptain}
+            onSwapPlayers={handleSwapPlayers}
+            onSell={handleSellPlayer}
             marketLocked={isLocked}
+            lineupErrors={lineupErrors}
+            dirty={dirty}
           />
         </Card>
       )}

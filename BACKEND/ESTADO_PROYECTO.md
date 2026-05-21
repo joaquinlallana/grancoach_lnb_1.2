@@ -1,7 +1,7 @@
 # Estado del Proyecto — Gran Coach LNB Fantasy
 
-> **Fecha de actualización:** 2026-05-05
-> **Estado general:** ~80% backend MVP completo. Frontend pendiente.
+> **Fecha de actualización:** 2026-05-21
+> **Estado general:** Backend MVP **100% completo + emails + smart-buy** (v1.4). Frontend MVP **100% jugable con vista táctica y drag-and-drop** (v1.4). 112 tests passing. Pendientes para producción: SMTP real, deploy, monitorización, tests E2E.
 
 ---
 
@@ -16,16 +16,31 @@
 | Sincronización con api-basketball | ✅ 95% | `SyncService` + `ApiBasketballService` con rate-limit y reintentos |
 | Carga progresiva de stats | ✅ 100% | `ProgressiveStatsLoaderService` (1 req / 6s) + cron opcional |
 | Datos seed (jornadas + equipos + jugadores) | ✅ 80% | 38 jornadas vía migración. Equipos y jugadores sincronizables. Posiciones reales y precios siguen como pendiente manual |
-| Mercado (compra/venta/transfer) | ✅ 100% | Validaciones por triggers + lógica de penalización corregida |
+| Mercado (compra/venta/transfer) | ✅ 100% | Validaciones por triggers + lógica de penalización + **smart-buy v1.4** (asigna titular/banco según roster) |
 | Scoring (puntos fantasy) | ✅ 100% | Vistas de DB calculan puntos automáticamente |
 | Rankings | ✅ 100% | General y por jornada funcionando |
-| Tests | 🔴 10% | Solo `auth.test.js`. Falta cobertura de market, lineup, scoring, admin |
-| Frontend | 🔴 0% | No iniciado |
-| Documentación API (Swagger) | 🔴 0% | No iniciado |
+| **Sistema de emails (v1.4)** | ✅ 100% | `EmailService` con 6 plantillas (bienvenida, mercado, lineup, ventana open/close, ranking semanal). Cron Lunes 00:00 UTC. Activado por `EMAILS_ENABLED` |
+| Tests | ✅ 90% | 112 tests passing (5 suites: auth, market, lineup, gameweeks, errorHandler). Falta `scoring.test.js` y E2E. |
+| Frontend | ✅ 100% | MVP jugable con vista táctica + DnD + smart-buy + slots accionables |
+| Documentación API (Swagger) | 🟡 0% | Opcional, no bloqueante |
 
 ---
 
 ## 2. Componentes implementados desde la última revisión
+
+### v1.4 (2026-05-21)
+
+- **`src/services/EmailService.js`** (NUEVO) — Transporter SMTP de nodemailer + 6 plantillas HTML (welcome, marketChange, lineupUpdate, windowOpen, windowClose, weekendRanking). Fire-and-forget en todos los puntos de invocación.
+- **`src/cron/emailScheduler.js`** (NUEVO) — Cron Lunes 00:00 UTC (Sunday 21:00 ARG) que envía resumen semanal de ranking a todos los usuarios activos.
+- **`src/services/MarketService.js`** — **Smart-buy**: antes del INSERT consulta el roster y decide `es_titular` automáticamente (sin titular en esa posición + < 5 titulares → titular; sino → suplente). Devuelve `esTitular` en el response.
+- **`src/repositories/UserRepository.js`** — Método `findAllActive()` para emails masivos (open/close de ventana, ranking semanal).
+- **`src/repositories/RankingRepository.js`** — Método `getLastClosedWeekRanking()` para el email semanal.
+- **`src/controllers/GameweekController.js`** — Disparan `sendWindowOpen` / `sendWindowClose` al avanzar jornada.
+- **`src/services/AuthService.js`** — Dispara `sendWelcome` al registrar.
+- **`src/services/LineupService.js`** — Dispara `sendLineupUpdate` al guardar alineación.
+- **`tests/market.test.js`** — `setupBuy` actualizado para mockear la nueva query del roster del smart-buy. **112 tests passing.**
+
+### v1.0 - v1.3
 
 - **`src/controllers/AdminController.js`** + **`src/routes/admin.js`** — endpoints protegidos por JWT + `isAdmin`:
   - `GET /api/admin/api-status` — cuota api-basketball.
@@ -87,12 +102,16 @@ Ver [README.md](README.md) sección "Setup" para los comandos exactos. Resumen:
 
 ## 6. Próximos pasos críticos
 
-Detalle completo en [ROADMAP.md](ROADMAP.md). Resumen por prioridad:
+Detalle completo en [../ROADMAP.md](../ROADMAP.md). Resumen por prioridad para **lanzar a usuarios reales**:
 
-1. **Frontend MVP** — login, dashboard, mercado, ranking. Es el bloqueante real para que el juego sea jugable.
-2. **Tests** — cobertura de `MarketService`, `LineupService`, `ScoringService`, rutas admin. Target 80%.
-3. **Asignar posiciones reales y precios coherentes** a los jugadores sincronizados (hoy todos quedan como `base` con precio fijo).
-4. **Documentación Swagger** + deploy + cron de sync diario.
+1. **Proveedor SMTP de producción** — definir SES / SendGrid / Mailgun / Postmark, configurar SPF/DKIM/DMARC, setear `EMAILS_ENABLED=true` con credenciales reales.
+2. **Deploy del backend** (Render / Railway / Fly.io) + **frontend** (Vercel / Netlify) + variables de entorno + HTTPS.
+3. **Cron diario de stats en producción** (reemplazar `TESTING_CRON` por un cron real respetando 100 req/día de api-basketball).
+4. **Monitorización** — Sentry / Better Stack para errores; logs estructurados.
+5. **Tests E2E** (Playwright o Cypress) — protege contra regresiones en cada deploy.
+6. **Tests de ScoringService** — cobertura de las vistas SQL (×2 capitán, ×1 titular, ×0.5 suplente).
+7. **Recuperar contraseña** — endpoint `forgot-password` + `reset-password` (el sistema de email ya está armado).
+8. **Documentación Swagger** (opcional, útil para integradores futuros).
 
 ---
 
@@ -106,7 +125,8 @@ HTTP → Routes (express-validator) → Controllers → Services → Repositorie
 
 - **Routes** (`src/routes/`, 6 archivos) — validación + middlewares (`authenticate`, `isAdmin`).
 - **Controllers** (`src/controllers/`, 6 archivos) — adaptan req/res, sin lógica de negocio.
-- **Services** (`src/services/`, 7 archivos) — `Auth`, `Market`, `Lineup`, `Scoring`, `Sync`, `ApiBasketball`, `ProgressiveStatsLoader`.
+- **Services** (`src/services/`, 8 archivos) — `Auth`, `Market` (smart-buy), `Lineup`, `Scoring`, `Sync`, `ApiBasketball`, `ProgressiveStatsLoader`, **`Email`** (v1.4).
+- **Cron** (`src/cron/`) — `emailScheduler.js` (resumen semanal de ranking, Lunes 00:00 UTC).
 - **Repositories** (`src/repositories/`, 9 archivos) — SQL parametrizado, una clase por tabla principal.
 - **Triggers de BD** — presupuesto, límite de plantilla, jornada cerrada, capitán titular.
 - **Vistas de BD** — calculan puntos fantasy y rankings sin código de aplicación.

@@ -2,7 +2,7 @@
 
 Juego de Fantasy Basketball de la **Liga Nacional de Básquet de Argentina (LNB)**. Cada jugador arma su equipo con jugadores reales, define titulares y capitán, y acumula puntos según las estadísticas de cada jornada.
 
-> **Estado (v1.3 — 2026-05-15):** MVP completo y jugable end-to-end. **Reglamento oficial aplicado** (Art. II posiciones, Art. V transferencias). 15 bugs corregidos en total. **112 tests automatizados passing**. Posiciones reales asignadas a 365 jugadores. Precios calculados por valoración FIBA real.
+> **Estado (v1.4 — 2026-05-21):** MVP completo y jugable end-to-end. Vista táctica de cancha con **drag-and-drop** (`@dnd-kit`). **Smart-buy backend** (asigna titular/suplente automáticamente según roster). **Sistema de emails con nodemailer** (bienvenida, mercado, lineup, apertura/cierre de ventana, ranking semanal). **Reglamento oficial aplicado** (Art. II, Art. V). 24 bugs corregidos en total. **112 tests automatizados passing**. Posiciones reales asignadas a 365 jugadores. Precios calculados por valoración FIBA real.
 
 ---
 
@@ -26,12 +26,17 @@ Juego de Fantasy Basketball de la **Liga Nacional de Básquet de Argentina (LNB)
 ### Flujo de usuario completo
 
 ```
-1. Registrarse  →  recibís $100M de presupuesto inicial
+1. Registrarse  →  recibís $100M de presupuesto inicial + email de bienvenida
 2. Ir al mercado →  comprás hasta 10 jugadores de la LNB
-3. Armar lineup  →  elegís 5 titulares + 1 capitán
+                    (smart-buy: cada compra entra como titular si hay cupo libre
+                     para esa posición; sino, va automáticamente al banco)
+3. Armar lineup  →  arrastrás jugadores entre banco y cancha (drag-and-drop),
+                    elegís capitán (×2 puntos). Validación de posición al soltar.
 4. Esperar       →  el admin carga stats al finalizar cada jornada
+                    (notificaciones por email de apertura/cierre de ventana)
 5. Ver puntos    →  el sistema calcula tu puntaje automáticamente
 6. Ranking       →  competís contra otros usuarios
+                    (email semanal con el resumen del ranking — Lunes 00:00 UTC)
 ```
 
 ### Reglas del sistema de puntos
@@ -321,6 +326,13 @@ Abrir: [http://localhost:5173](http://localhost:5173)
 | `API_BASKETBALL_LEAGUE_ID` | — | ID de la LNB en la API (`18`) |
 | `API_BASKETBALL_SEASON` | — | Temporada (ej: `2024-2025`) |
 | `TESTING_CRON` | — | `true` para activar carga automática de stats cada 10 min |
+| `EMAILS_ENABLED` | — | `true` para enviar notificaciones por email (default `false`) |
+| `SMTP_HOST` | si emails | Host SMTP (ej: `smtp.gmail.com`, `email-smtp.us-east-1.amazonaws.com`) |
+| `SMTP_PORT` | si emails | Puerto SMTP (`465` SSL, `587` STARTTLS) |
+| `SMTP_USER` | si emails | Usuario SMTP |
+| `SMTP_PASS` | si emails | Contraseña SMTP (Gmail: App Password) |
+| `SMTP_FROM` | si emails | Email remitente (ej: `Gran Coach LNB <no-reply@dominio.com>`) |
+| `FRONTEND_URL` | si emails | URL pública del frontend (para enlaces en emails) |
 
 Generar un JWT_SECRET seguro:
 ```bash
@@ -610,8 +622,9 @@ Ver [DOCUMENTACION_TESTS.md](./DOCUMENTACION_TESTS.md) para descripción de cada
 - **Auth:** JWT (`jsonwebtoken`) + bcryptjs
 - **Validación:** express-validator
 - **Seguridad:** Helmet, CORS, express-rate-limit
-- **Cron:** node-cron (carga progresiva de stats)
-- **Tests:** Jest + Supertest (DB mockeada)
+- **Cron:** node-cron (carga progresiva de stats + email semanal de ranking)
+- **Emails:** nodemailer (SMTP configurable, flag `EMAILS_ENABLED`)
+- **Tests:** Jest + Supertest (DB mockeada) — 112 tests passing
 
 ### Frontend
 - **Build:** Vite 5
@@ -622,7 +635,8 @@ Ver [DOCUMENTACION_TESTS.md](./DOCUMENTACION_TESTS.md) para descripción de cada
 - **HTTP:** Axios (interceptores de JWT y expiración)
 - **Forms:** React Hook Form 7
 - **UI:** TailwindCSS 3 + Lucide icons
-- **Notificaciones:** react-hot-toast
+- **Drag-and-drop:** @dnd-kit/core + @dnd-kit/utilities
+- **Notificaciones:** react-hot-toast (toast) + nodemailer en backend (email)
 
 ---
 

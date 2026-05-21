@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, ShoppingBag } from 'lucide-react'
 import { usePlayers, useMarketStatus } from '../hooks/useMarket'
 import { useTeam } from '../hooks/useTeam'
@@ -11,7 +12,9 @@ import { EmptyState } from '../components/ui/EmptyState'
 import { Button } from '../components/ui/Button'
 
 export function Market() {
-  const [filters, setFilters] = useState({ page: 1, limit: 20 })
+  const [searchParams] = useSearchParams()
+  const initialPosicion = searchParams.get('posicion') || undefined
+  const [filters, setFilters] = useState({ page: 1, limit: 20, posicion: initialPosicion })
   const { data: playersData, isLoading } = usePlayers(filters)
   const { data: marketStatus } = useMarketStatus()
   const { data: team } = useTeam()

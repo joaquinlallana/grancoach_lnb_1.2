@@ -1,6 +1,8 @@
 const FantasyTeamRepository = require('../repositories/FantasyTeamRepository');
 const GameweekRepository = require('../repositories/GameweekRepository');
 const PlayerRepository = require('../repositories/PlayerRepository');
+const UserRepository = require('../repositories/UserRepository');
+const EmailService = require('./EmailService');
 const { createError } = require('../middleware/errorHandler');
 
 // Posiciones válidas por tipo (Art. II del reglamento)
@@ -92,7 +94,17 @@ class LineupService {
       }
     }
 
-    return FantasyTeamRepository.updateLineup(team.id, lineupChanges);
+    const result = await FantasyTeamRepository.updateLineup(team.id, lineupChanges);
+
+    // Send email (fire and forget) if emails are enabled
+    if (process.env.EMAILS_ENABLED === 'true') {
+      const user = await UserRepository.findById(userId).catch(() => null);
+      if (user) {
+        EmailService.sendLineupUpdate(user).catch(console.error);
+      }
+    }
+
+    return result;
   }
 
   /**

@@ -62,9 +62,10 @@ function queueQueries(...responses) {
  * @param {number} opts.count - transferencias previas en la jornada (default 0)
  * @param {boolean} opts.hasSnapshot - si el equipo tiene historial de jornadas (default true)
  */
-function setupBuy({ count = 0, hasSnapshot = true } = {}) {
-  // client.query: INSERT jugador, SELECT snapshot, INSERT transferencia
+function setupBuy({ count = 0, hasSnapshot = true, rosterTitulares = [] } = {}) {
+  // client.query: SELECT roster (smart-buy), INSERT jugador, SELECT snapshot, INSERT transferencia
   const clientQuery = makeClient(
+    { rows: rosterTitulares },
     { rows: [{ id: 1, equipo_fantasy_id: TEAM.id, jugador_id: PLAYER.id, es_titular: true }] },
     hasSnapshot ? SNAPSHOT_CON_HISTORIAL : SNAPSHOT_INICIAL,
     { rowCount: 1 }

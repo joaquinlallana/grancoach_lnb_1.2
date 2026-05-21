@@ -3,6 +3,8 @@ const FantasyTeamRepository = require('../repositories/FantasyTeamRepository');
 const PlayerRepository = require('../repositories/PlayerRepository');
 const TransferRepository = require('../repositories/TransferRepository');
 const GameweekRepository = require('../repositories/GameweekRepository');
+const UserRepository = require('../repositories/UserRepository');
+const EmailService = require('./EmailService');
 const { createError } = require('../middleware/errorHandler');
 
 // Transferencias gratuitas por jornada (Art. V del reglamento)
@@ -42,7 +44,7 @@ class MarketService {
    * el usuario está armando su plantilla por primera vez.
    */
   async buyPlayer(userId, jugadorId) {
-    return withTransaction(async (client) => {
+    const result = await withTransaction(async (client) => {
       // 1. Obtener equipo del usuario
       const team = await FantasyTeamRepository.findByUserId(userId);
       if (!team) throw createError(404, 'Equipo fantasy no encontrado');
@@ -63,13 +65,29 @@ class MarketService {
         );
       }
 
-      // 5. La DB validará: presupuesto, límite 10 jugadores, máx 3 del mismo equipo LNB,
-      //    y si la jornada está bloqueada (via triggers). Si algo falla, la excepción
-      //    de PostgreSQL se propagará y el error handler la convertirá en 422.
+      // 5. Smart-buy: decidir si el nuevo jugador entra como titular o suplente
+      //    según el roster actual. Reglas (Art. II):
+      //      - Si ya hay 5 titulares → suplente
+      //      - Si ya hay un titular en la misma posición → suplente
+      //      - Caso contrario → titular
+      const rosterActual = await client.query(
+        `SELECT j.posicion, efj.es_titular
+         FROM equipo_fantasy_jugadores efj
+         JOIN jugadores j ON j.id = efj.jugador_id
+         WHERE efj.equipo_fantasy_id = $1`,
+        [team.id]
+      );
+      const titularesActuales = rosterActual.rows.filter((r) => r.es_titular);
+      const tieneOtroEnEsaPos = titularesActuales.some((r) => r.posicion === player.posicion);
+      const llegoAlMax = titularesActuales.length >= 5;
+      const esTitular = !tieneOtroEnEsaPos && !llegoAlMax;
+
+      // 6. La DB validará: presupuesto, límite 10 jugadores, máx 3 del mismo equipo LNB,
+      //    y si la jornada está bloqueada (via triggers).
       const relation = await client.query(
         `INSERT INTO equipo_fantasy_jugadores (equipo_fantasy_id, jugador_id, es_titular)
-         VALUES ($1, $2, true) RETURNING *`,
-        [team.id, jugadorId]
+         VALUES ($1, $2, $3) RETURNING *`,
+        [team.id, jugadorId, esTitular]
       );
 
       // 6. Registrar transferencia (sólo entrada, sin jugador que sale)
@@ -90,8 +108,20 @@ class MarketService {
         relacion: relation.rows[0],
         jugador: player,
         equipo: await FantasyTeamRepository.getPresupuesto(team.id),
+        esPenalizada,
+        esTitular,
       };
     });
+
+    // Send email (fire and forget) if emails are enabled
+    if (process.env.EMAILS_ENABLED === 'true') {
+      const user = await UserRepository.findById(userId).catch(() => null);
+      if (user) {
+        EmailService.sendMarketChange(user, 'buy', result.jugador, result.esPenalizada, result.equipo.presupuesto_restante).catch(console.error);
+      }
+    }
+
+    return result;
   }
 
   /**
@@ -99,7 +129,7 @@ class MarketService {
    * El trigger devolver_presupuesto reintegra el valor automáticamente.
    */
   async sellPlayer(userId, jugadorId) {
-    return withTransaction(async (client) => {
+    const result = await withTransaction(async (client) => {
       const team = await FantasyTeamRepository.findByUserId(userId);
       if (!team) throw createError(404, 'Equipo fantasy no encontrado');
 
@@ -130,15 +160,28 @@ class MarketService {
       return {
         message: 'Jugador vendido exitosamente',
         presupuesto: await FantasyTeamRepository.getPresupuesto(team.id),
+        esPenalizada,
+        jugadorId,
       };
     });
+
+    // Send email (fire and forget) if emails are enabled
+    if (process.env.EMAILS_ENABLED === 'true') {
+      const user = await UserRepository.findById(userId).catch(() => null);
+      const player = await PlayerRepository.findById(jugadorId).catch(() => null);
+      if (user && player) {
+        EmailService.sendMarketChange(user, 'sell', player, result.esPenalizada, result.presupuesto.presupuesto_restante).catch(console.error);
+      }
+    }
+
+    return result;
   }
 
   /**
    * Transferencia directa: vender un jugador y comprar otro en una sola operación.
    */
   async transferPlayer(userId, { jugadorSaleId, jugadorEntraId }) {
-    return withTransaction(async (client) => {
+    const result = await withTransaction(async (client) => {
       const team = await FantasyTeamRepository.findByUserId(userId);
       if (!team) throw createError(404, 'Equipo fantasy no encontrado');
 
@@ -198,6 +241,16 @@ class MarketService {
         jugadorFichado: playerIn,
       };
     });
+
+    // Send email (fire and forget) if emails are enabled
+    if (process.env.EMAILS_ENABLED === 'true') {
+      const user = await UserRepository.findById(userId).catch(() => null);
+      if (user) {
+        EmailService.sendMarketChange(user, 'transfer', result.jugadorFichado, result.penalizada, result.presupuesto.presupuesto_restante).catch(console.error);
+      }
+    }
+
+    return result;
   }
 
   async getMarketPlayers(filters) {

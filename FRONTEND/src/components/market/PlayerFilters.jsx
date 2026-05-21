@@ -1,9 +1,16 @@
 import { Search } from 'lucide-react'
-import { useLnbTeams, usePositions } from '../../hooks/useMarket'
+import { useLnbTeams } from '../../hooks/useMarket'
+
+const POSICIONES = [
+  { value: 'base', label: 'Base' },
+  { value: 'escolta', label: 'Escolta' },
+  { value: 'alero', label: 'Alero' },
+  { value: 'ala-pivot', label: 'Ala-Pivot' },
+  { value: 'pivot', label: 'Pívot' },
+]
 
 export function PlayerFilters({ filters, onChange }) {
   const { data: teams = [] } = useLnbTeams()
-  const { data: positions = [] } = usePositions()
 
   const set = (key, value) => onChange({ ...filters, [key]: value || undefined, page: 1 })
 
@@ -28,9 +35,9 @@ export function PlayerFilters({ filters, onChange }) {
         className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500"
       >
         <option value="">Todas las posiciones</option>
-        {positions.map((p) => (
-          <option key={p.nombre || p} value={p.nombre || p}>
-            {p.nombre || p}
+        {POSICIONES.map((p) => (
+          <option key={p.value} value={p.value}>
+            {p.label}
           </option>
         ))}
       </select>

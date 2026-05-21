@@ -2,6 +2,8 @@ const GameweekRepository = require('../repositories/GameweekRepository');
 const MatchRepository = require('../repositories/MatchRepository');
 const LineupService = require('../services/LineupService');
 const ScoringService = require('../services/ScoringService');
+const UserRepository = require('../repositories/UserRepository');
+const EmailService = require('../services/EmailService');
 const { createError } = require('../middleware/errorHandler');
 
 /**
@@ -87,6 +89,11 @@ class GameweekController {
       const id = await resolveJornadaId(req.params.id);
       if (!id) return res.status(404).json({ success: false, message: 'Jornada no encontrada' });
       const result = await LineupService.closeGameweek(id);
+
+      // Send "market closed" email to all active users (fire and forget)
+      const users = await UserRepository.findAllActive();
+      EmailService.sendWindowClose(users).catch(console.error);
+
       res.json({ success: true, data: result });
     } catch (err) {
       next(err);
@@ -204,6 +211,15 @@ class GameweekController {
 
       // Obtener la siguiente jornada (automáticamente es la próxima no cerrada)
       const nextGameweek = await GameweekRepository.findCurrent();
+
+      // Send "market closed" email for the current gameweek
+      const users = await UserRepository.findAllActive();
+      EmailService.sendWindowClose(users).catch(console.error);
+
+      // Send "market open" email for the next gameweek if it exists
+      if (nextGameweek) {
+        EmailService.sendWindowOpen(users).catch(console.error);
+      }
 
       return res.json({
         success: true,
