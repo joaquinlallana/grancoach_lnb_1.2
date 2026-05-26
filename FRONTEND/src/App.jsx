@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { Layout } from './components/layout/Layout'
 import { PrivateRoute, AdminRoute } from './components/layout/PrivateRoute'
+import { ErrorBoundary } from './components/ui/ErrorBoundary'
 import { Landing }      from './pages/Landing'
 import { Login }        from './pages/Login'
 import { Register }     from './pages/Register'
@@ -13,32 +14,34 @@ import { Admin }        from './pages/Admin'
 
 export default function App() {
   return (
-    <Routes>
-      {/* Public */}
-      <Route path="/" element={<Landing />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
+    <ErrorBoundary>
+      <Routes>
+        {/* Public */}
+        <Route path="/" element={<Landing />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
 
-      {/* Protected — all under Layout (navbar) */}
-      <Route element={<PrivateRoute />}>
-        <Route element={<Layout />}>
-          <Route path="/dashboard"    element={<Dashboard />} />
-          <Route path="/market"       element={<Market />} />
-          <Route path="/my-team"      element={<MyTeam />} />
-          <Route path="/rankings"     element={<Rankings />} />
-          <Route path="/players/:id"  element={<PlayerDetail />} />
+        {/* Protected — todas dentro del Layout (navbar + error boundary local) */}
+        <Route element={<PrivateRoute />}>
+          <Route element={<Layout />}>
+            <Route path="/dashboard"    element={<Dashboard />} />
+            <Route path="/market"       element={<Market />} />
+            <Route path="/my-team"      element={<MyTeam />} />
+            <Route path="/rankings"     element={<Rankings />} />
+            <Route path="/players/:id"  element={<PlayerDetail />} />
+          </Route>
         </Route>
-      </Route>
 
-      {/* Admin only */}
-      <Route element={<AdminRoute />}>
-        <Route element={<Layout />}>
-          <Route path="/admin" element={<Admin />} />
+        {/* Admin */}
+        <Route element={<AdminRoute />}>
+          <Route element={<Layout />}>
+            <Route path="/admin" element={<Admin />} />
+          </Route>
         </Route>
-      </Route>
 
-      {/* Fallback */}
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        {/* Fallback */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </ErrorBoundary>
   )
 }

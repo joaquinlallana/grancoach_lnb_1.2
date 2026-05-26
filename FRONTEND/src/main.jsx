@@ -6,12 +6,15 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { Toaster } from 'react-hot-toast'
 import App from './App'
 import './index.css'
+// Inicializa el tema antes del primer render (lee localStorage + prefers-color-scheme).
+import './store/themeStore'
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
       staleTime: 30_000,
+      refetchOnWindowFocus: false,
     },
   },
 })
@@ -24,13 +27,18 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <Toaster
           position="top-right"
           toastOptions={{
+            duration: 3500,
+            className: '!font-sans !text-sm',
             style: {
-              background: '#1f2937',
-              color: '#f9fafb',
-              border: '1px solid #374151',
+              background: 'rgb(24 24 27)',
+              color: 'rgb(244 244 245)',
+              border: '1px solid rgb(63 63 70)',
+              borderRadius: '0.75rem',
+              padding: '0.625rem 0.875rem',
+              boxShadow: '0 10px 20px -5px rgb(0 0 0 / 0.35)',
             },
-            success: { iconTheme: { primary: '#22c55e', secondary: '#f9fafb' } },
-            error:   { iconTheme: { primary: '#ef4444', secondary: '#f9fafb' } },
+            success: { iconTheme: { primary: '#10b981', secondary: '#f4f4f5' } },
+            error:   { iconTheme: { primary: '#ef4444', secondary: '#f4f4f5' } },
           }}
         />
         <ReactQueryDevtools initialIsOpen={false} />

@@ -1,7 +1,13 @@
 import axios from 'axios'
 
+// Si VITE_API_URL está definido (producción), apuntamos directo al backend.
+// En desarrollo (sin VITE_API_URL), usamos `/api` que Vite proxea a localhost:3000.
+const apiBaseUrl = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL.replace(/\/$/, '')}/api`
+  : '/api'
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: apiBaseUrl,
   timeout: 15000,
   headers: { 'Content-Type': 'application/json' },
 })

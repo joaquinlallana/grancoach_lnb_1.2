@@ -88,7 +88,7 @@ class RankingRepository {
         ef.nombre AS equipo_nombre,
         u.nombre AS usuario_nombre,
         u.id as usuario_id,
-        rj.puntos AS puntos,
+        u.email AS email,
         rj.puntos_totales
        FROM ranking_por_jornada rj
        JOIN equipos_fantasy ef ON ef.id = rj.equipo_fantasy_id

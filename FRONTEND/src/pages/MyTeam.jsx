@@ -1,17 +1,22 @@
 import { useState, useEffect, useRef } from 'react'
-import { Users, Save, AlertTriangle } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Users, Save, AlertTriangle, Crown, Star, RefreshCw, Lock } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { useTeam, useUpdateLineup, useTransfers } from '../hooks/useTeam'
+import { useSellPlayer } from '../hooks/useMarket'
+import { useCurrentGameweek } from '../hooks/useRankings'
+import { CourtView } from '../components/team/CourtView'
+import { BudgetBar } from '../components/market/BudgetBar'
+import { Card } from '../components/ui/Card'
+import { Button } from '../components/ui/Button'
+import { PageSpinner } from '../components/ui/Spinner'
+import { EmptyState } from '../components/ui/EmptyState'
 
 const MAX_STARTERS = 5
 const MAX_BENCH = 5
 const PERIMETRALES = ['base', 'escolta', 'alero']
 const INTERNOS = ['ala-pivot', 'pivot']
 
-/**
- * Normaliza el lineup: máximo 1 titular por posición, máximo 5 titulares.
- * Los duplicados/excedentes se mueven al banco automáticamente.
- * Devuelve { normalizados, cambios } donde `cambios` lista los jugadores movidos.
- */
 function normalizeLineup(jugadores) {
   const posTomadas = new Set()
   let nTitulares = 0
@@ -52,16 +57,12 @@ function validarLineup(players) {
 
   return errores.length > 0 ? errores : null
 }
-import { useTeam, useUpdateLineup, useTransfers } from '../hooks/useTeam'
-import { useSellPlayer } from '../hooks/useMarket'
-import { useCurrentGameweek } from '../hooks/useRankings'
-import { CourtView } from '../components/team/CourtView'
-import { BudgetBar } from '../components/market/BudgetBar'
-import { Card } from '../components/ui/Card'
-import { Button } from '../components/ui/Button'
-import { PageSpinner } from '../components/ui/Spinner'
-import { EmptyState } from '../components/ui/EmptyState'
-import { Link } from 'react-router-dom'
+
+const RULES = [
+  { icon: Crown,    title: 'Capitán × 2',          desc: 'Su puntaje se duplica' },
+  { icon: Star,     title: 'Titular × 1',          desc: 'Suplente × 0,5' },
+  { icon: RefreshCw, title: '2 transferencias',     desc: 'Gratis por jornada' },
+]
 
 export function MyTeam() {
   const { data: team, isLoading } = useTeam()
@@ -80,14 +81,13 @@ export function MyTeam() {
   }
 
   useEffect(() => {
-    // Solo sincroniza con el servidor si no hay cambios pendientes
     if (team?.jugadores && !dirtyRef.current) {
       const { normalizados, cambios } = normalizeLineup(team.jugadores)
       setPlayers(normalizados)
       if (cambios.length > 0) {
         toast(
           `Movimos ${cambios.length} jugador(es) al banco para respetar el reglamento. Guardá los cambios.`,
-          { icon: '⚠️', duration: 5000 }
+          { duration: 5000 }
         )
         markDirty(true)
       }
@@ -95,7 +95,6 @@ export function MyTeam() {
   }, [team])
 
   const isLocked = gameweek?.cerrada
-
   const penalizedTransfers = (transfers || []).filter(
     (t) => t.es_penalizada && t.jornada_id === gameweek?.id
   ).length
@@ -109,12 +108,10 @@ export function MyTeam() {
     const bench    = players.filter((p) => !p.es_titular)
 
     if (!player.es_titular) {
-      // Mover a titulares
       if (starters.length >= MAX_STARTERS) {
         toast.error(`Ya tenés ${MAX_STARTERS} titulares. Pasá uno a suplente primero.`)
         return
       }
-      // Verificar conflicto de posición
       const conflicto = starters.find((s) => s.posicion === player.posicion)
       if (conflicto) {
         const label = player.posicion.charAt(0).toUpperCase() + player.posicion.slice(1)
@@ -122,7 +119,6 @@ export function MyTeam() {
         return
       }
     } else {
-      // Mover a banco
       if (bench.length >= MAX_BENCH) {
         toast.error(`Ya tenés ${MAX_BENCH} suplentes. Vendé un jugador primero.`)
         return
@@ -139,7 +135,6 @@ export function MyTeam() {
     markDirty(true)
   }
 
-  // Swap atómico de dos jugadores (intercambia titular ↔ banco)
   const handleSwapPlayers = (idA, idB) => {
     if (isLocked) return
     setPlayers((prev) =>
@@ -155,11 +150,10 @@ export function MyTeam() {
     markDirty(true)
   }
 
-  // Vender jugador con confirmación
   const handleSellPlayer = (jugadorId, nombre) => {
     if (isLocked) return
-    const confirmar = window.confirm(`¿Seguro que querés vender a ${nombre}? Se devolverá su precio al presupuesto.`)
-    if (!confirmar) return
+    const ok = window.confirm(`¿Vender a ${nombre}? Se devolverá su precio al presupuesto.`)
+    if (!ok) return
     sellPlayer.mutate(jugadorId)
   }
 
@@ -175,7 +169,6 @@ export function MyTeam() {
   }
 
   const handleSave = () => {
-    // Validar antes de enviar solo cuando el plantel está completo
     if (players.length === 10) {
       const errores = validarLineup(players)
       if (errores) {
@@ -191,7 +184,7 @@ export function MyTeam() {
     updateLineup.mutate(jugadores, { onSuccess: () => markDirty(false) })
   }
 
-  if (isLoading) return <PageSpinner />
+  if (isLoading) return <PageSpinner label="Cargando tu equipo…" />
 
   const numStarters = players.filter((p) => p.es_titular).length
   const numBench    = players.filter((p) => !p.es_titular).length
@@ -199,25 +192,37 @@ export function MyTeam() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
+      <header className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white">{team?.nombre || 'Mi Equipo'}</h1>
-          <p className="text-gray-400 text-sm mt-1">
-            {players.length}/10 jugadores · <span className={numStarters >= MAX_STARTERS ? 'text-yellow-400' : ''}>{numStarters}/5 titulares</span> · <span className={numBench >= MAX_BENCH ? 'text-yellow-400' : ''}>{numBench}/5 suplentes</span>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-surface-900 dark:text-surface-50">
+            {team?.nombre || 'Mi equipo'}
+          </h1>
+          <p className="text-sm text-surface-600 dark:text-surface-400 mt-1 tabular-nums">
+            {players.length}/10 jugadores ·{' '}
+            <span className={numStarters >= MAX_STARTERS ? 'text-amber-600 dark:text-amber-400' : ''}>
+              {numStarters}/5 titulares
+            </span>{' '}·{' '}
+            <span className={numBench >= MAX_BENCH ? 'text-amber-600 dark:text-amber-400' : ''}>
+              {numBench}/5 suplentes
+            </span>
           </p>
         </div>
         {dirty && !isLocked && (
-          <Button onClick={handleSave} loading={updateLineup.isPending} variant="primary" disabled={players.length === 10 && !!lineupErrors}>
-            <Save className="h-4 w-4" />
+          <Button
+            onClick={handleSave}
+            loading={updateLineup.isPending}
+            variant="primary"
+            iconLeft={Save}
+            disabled={players.length === 10 && !!lineupErrors}
+          >
             Guardar cambios
           </Button>
         )}
-      </div>
+      </header>
 
-      {/* Transfer warning */}
       {penalizedTransfers > 0 && (
-        <div className="flex items-center gap-3 p-4 rounded-xl bg-yellow-900/20 border border-yellow-800 text-yellow-300 text-sm">
-          <AlertTriangle className="h-5 w-5 shrink-0" />
+        <div className="flex items-start gap-3 p-4 rounded-2xl bg-amber-500/5 border border-amber-500/20 text-amber-700 dark:text-amber-300 text-sm">
+          <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" aria-hidden="true" />
           <span>
             Tenés <strong>{penalizedTransfers}</strong> transferencia(s) penalizada(s) esta jornada.
             Se descontarán <strong>{penalizedTransfers * 20} puntos</strong> al cierre.
@@ -225,34 +230,31 @@ export function MyTeam() {
         </div>
       )}
 
-      {/* Locked */}
       {isLocked && (
-        <div className="p-4 rounded-xl bg-red-900/20 border border-red-800 text-red-300 text-sm">
-          🔒 La jornada está cerrada. No podés hacer cambios hasta la próxima jornada.
+        <div className="flex items-start gap-3 p-4 rounded-2xl bg-rose-500/5 border border-rose-500/20 text-rose-700 dark:text-rose-300 text-sm">
+          <Lock className="h-5 w-5 shrink-0 mt-0.5" aria-hidden="true" />
+          <span>La jornada está cerrada. No podés hacer cambios hasta la próxima.</span>
         </div>
       )}
 
-      {/* Budget */}
       {team?.presupuesto_restante != null && (
         <Card>
           <BudgetBar remaining={team.presupuesto_restante} initial={team.presupuesto_inicial || 100_000_000} />
         </Card>
       )}
 
-      {/* Rules reminder */}
-      <div className="grid grid-cols-3 gap-3 text-center text-xs text-gray-500">
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-3">
-          <div className="text-lg mb-1">👑</div>
-          Capitán = ×2 puntos
-        </div>
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-3">
-          <div className="text-lg mb-1">⭐</div>
-          Titular = ×1 · Suplente = ×0.5
-        </div>
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-3">
-          <div className="text-lg mb-1">🔄</div>
-          2 transferencias gratis por jornada
-        </div>
+      {/* Reglas */}
+      <div className="grid grid-cols-3 gap-3">
+        {RULES.map(({ icon: Icon, title, desc }) => (
+          <div
+            key={title}
+            className="bg-white dark:bg-surface-900 border border-surface-200 dark:border-surface-800 rounded-xl p-3 text-center"
+          >
+            <Icon className="h-4 w-4 mx-auto mb-1 text-brand-600 dark:text-brand-400" aria-hidden="true" />
+            <p className="text-xs font-semibold text-surface-900 dark:text-surface-100">{title}</p>
+            <p className="text-[11px] text-surface-500 dark:text-surface-400 mt-0.5">{desc}</p>
+          </div>
+        ))}
       </div>
 
       {/* Roster */}
@@ -260,11 +262,15 @@ export function MyTeam() {
         <EmptyState
           icon={Users}
           title="Tu equipo está vacío"
-          description="Comprá jugadores en el mercado para comenzar"
-          action={<Link to="/market"><Button variant="primary">Ir al mercado</Button></Link>}
+          description="Comprá jugadores en el mercado para armar tu plantel."
+          action={
+            <Link to="/market">
+              <Button variant="primary">Ir al mercado</Button>
+            </Link>
+          }
         />
       ) : (
-        <Card>
+        <Card padding="md">
           <CourtView
             players={players}
             onToggleStarter={handleToggleStarter}

@@ -38,19 +38,13 @@ export function CourtView({
 }) {
   const [activeId, setActiveId] = useState(null)
 
-  // PointerSensor con activationConstraint para que clicks en botones no inicien drag
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 6 },
-    })
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   )
 
   const starters = players
     .filter((p) => p.es_titular)
-    .sort(
-      (a, b) =>
-        POSITION_ORDER.indexOf(a.posicion) - POSITION_ORDER.indexOf(b.posicion)
-    )
+    .sort((a, b) => POSITION_ORDER.indexOf(a.posicion) - POSITION_ORDER.indexOf(b.posicion))
 
   const bench = players.filter((p) => !p.es_titular)
 
@@ -76,45 +70,30 @@ export function CourtView({
     const dragged = players.find((p) => (p.jugador_id || p.id) === draggedId)
     if (!dragged) return
 
-    // Dropping on a court slot
     if (targetId.startsWith('slot-')) {
       const targetPos = targetId.slice(5)
 
       if (dragged.posicion !== targetPos) {
-        const labelDragged =
-          dragged.posicion.charAt(0).toUpperCase() +
-          dragged.posicion.slice(1).replace('-', ' ')
-        const labelTarget =
-          targetPos.charAt(0).toUpperCase() + targetPos.slice(1).replace('-', ' ')
+        const labelDragged = dragged.posicion.charAt(0).toUpperCase() + dragged.posicion.slice(1).replace('-', ' ')
+        const labelTarget = targetPos.charAt(0).toUpperCase() + targetPos.slice(1).replace('-', ' ')
         toast.error(`Un ${labelDragged} no puede jugar de ${labelTarget}`)
         return
       }
 
-      if (sourceType === 'court') return // mismo slot, ignorar
+      if (sourceType === 'court') return
 
-      // sourceType === 'bench': mover/swappear
-      const currentStarter = players.find(
-        (p) => p.es_titular && p.posicion === targetPos
-      )
+      const currentStarter = players.find((p) => p.es_titular && p.posicion === targetPos)
       if (currentStarter) {
-        // SWAP: el del banco se vuelve titular, el de la cancha se va al banco
         const otherId = currentStarter.jugador_id || currentStarter.id
-        if (onSwapPlayers) {
-          onSwapPlayers(draggedId, otherId)
-        }
+        if (onSwapPlayers) onSwapPlayers(draggedId, otherId)
       } else {
-        // Slot vacío: simplemente promover
         onToggleStarter(draggedId)
       }
       return
     }
 
-    // Dropping on bench area
-    if (targetId === 'bench') {
-      if (sourceType === 'court') {
-        // Pasar a banco (solo válido si hay espacio; el handler lo valida)
-        onToggleStarter(draggedId)
-      }
+    if (targetId === 'bench' && sourceType === 'court') {
+      onToggleStarter(draggedId)
     }
   }
 
@@ -129,74 +108,74 @@ export function CourtView({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="space-y-4">
-        {/* Layout: bench izquierda, cancha derecha */}
-        <div className="flex gap-3">
-          {/* LEFT: Bench */}
-          <div className="w-24 shrink-0">
-            <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2 text-center">
-              Banco {bench.length}/5
-            </div>
-            <BenchDropZone
-              bench={bench}
-              onToggleStarter={onToggleStarter}
-              onSetCaptain={onSetCaptain}
-              onSell={onSell}
-              marketLocked={marketLocked}
-            />
+      <div className="flex flex-col-reverse md:flex-row md:items-start gap-4 md:gap-6">
+        {/* Banco — izquierda en desktop, abajo en mobile */}
+        <aside className="md:w-28 md:shrink-0">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400 mb-2 text-center">
+            Banco {bench.length}/5
+          </p>
+          <BenchDropZone
+            bench={bench}
+            onToggleStarter={onToggleStarter}
+            onSetCaptain={onSetCaptain}
+            onSell={onSell}
+            marketLocked={marketLocked}
+          />
+        </aside>
+
+        {/* Cancha */}
+        <div className="flex-1 max-w-2xl mx-auto w-full">
+          <div
+            className="relative w-full rounded-2xl border border-surface-200 dark:border-surface-800 overflow-hidden bg-amber-50 dark:bg-stone-800"
+            style={{ paddingBottom: '70%' }}
+          >
+            <CourtSVG />
+
+            {POSITION_ORDER.map((posicion) => {
+              const player = startersByPos[posicion]
+              const pos = COURT_POSITIONS[posicion]
+              return (
+                <CourtSlot
+                  key={posicion}
+                  posicion={posicion}
+                  player={player}
+                  pos={pos}
+                  onToggleStarter={onToggleStarter}
+                  onSetCaptain={onSetCaptain}
+                  onSell={onSell}
+                  marketLocked={marketLocked}
+                />
+              )
+            })}
           </div>
 
-          {/* RIGHT: Cancha (con max-width para reducir tamaño) */}
-          <div className="flex-1 max-w-lg mx-auto">
+          {lineupErrors && dirty && (
             <div
-              className="relative w-full bg-gradient-to-b from-amber-900 via-yellow-800 to-amber-900 border border-amber-950 rounded-xl shadow-xl"
-              style={{ paddingBottom: '70%' }}
+              role="alert"
+              className="mt-3 p-3 rounded-2xl bg-rose-500/5 border border-rose-500/20 text-rose-700 dark:text-rose-300 text-xs space-y-1"
             >
-              <CourtSVG />
-
-              {/* Slots de titulares */}
-              {POSITION_ORDER.map((posicion) => {
-                const player = startersByPos[posicion]
-                const pos = COURT_POSITIONS[posicion]
-                return (
-                  <CourtSlot
-                    key={posicion}
-                    posicion={posicion}
-                    player={player}
-                    pos={pos}
-                    onToggleStarter={onToggleStarter}
-                    onSetCaptain={onSetCaptain}
-                    onSell={onSell}
-                    marketLocked={marketLocked}
-                  />
-                )
-              })}
+              <p className="font-semibold flex items-center gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+                Formación inválida
+              </p>
+              {lineupErrors.map((e, i) => (
+                <p key={i} className="pl-5">· {e}</p>
+              ))}
             </div>
-
-            {lineupErrors && dirty && (
-              <div className="mt-3 p-3 rounded-xl bg-red-950/40 border border-red-900 text-red-400 text-xs space-y-1">
-                <p className="font-semibold flex items-center gap-1.5">
-                  <AlertTriangle className="h-3.5 w-3.5" /> Formación inválida:
-                </p>
-                {lineupErrors.map((e, i) => (
-                  <p key={i} className="pl-5">· {e}</p>
-                ))}
-              </div>
-            )}
-          </div>
+          )}
         </div>
       </div>
 
       <DragOverlay dropAnimation={null}>
         {activeDraggedPlayer ? (
-          <div className="opacity-90 rotate-3 scale-105">
+          <div className="opacity-95 rotate-2 scale-105 pointer-events-none">
             <PlayerChip
               player={activeDraggedPlayer}
               position={activeDraggedPlayer.posicion}
               isBench={!activeDraggedPlayer.es_titular}
               onToggleStarter={() => {}}
               onSetCaptain={() => {}}
-              marketLocked={true}
+              marketLocked
             />
           </div>
         ) : null}
@@ -206,77 +185,34 @@ export function CourtView({
 }
 
 /* ------------------------------------------------------------------ */
-/* SVG simplificado: solo paint + aro + tablero + arco de 3pt          */
+/* SVG simplificado: paint + aro + tablero + arco de 3pt                */
 /* ------------------------------------------------------------------ */
 function CourtSVG() {
   return (
     <svg
-      className="absolute inset-0 w-full h-full"
+      className="absolute inset-0 w-full h-full text-amber-700/40 dark:text-stone-500/60"
       viewBox="0 0 400 280"
       preserveAspectRatio="xMidYMid meet"
+      aria-hidden="true"
     >
-      {/* Paint */}
-      <rect
-        x="150" y="8" width="100" height="110"
-        fill="rgba(255,255,255,0.06)"
-        stroke="rgba(255,255,255,0.35)"
-        strokeWidth="1.5"
-      />
-      {/* Tablero */}
-      <line
-        x1="170" y1="20" x2="230" y2="20"
-        stroke="rgba(255,255,255,0.7)"
-        strokeWidth="2.5"
-      />
-      {/* Aro */}
-      <circle
-        cx="200" cy="28" r="7"
-        fill="rgba(255,140,0,0.6)"
-        stroke="rgba(255,180,40,0.95)"
-        strokeWidth="2"
-      />
-      {/* 3pt: tramos rectos + arco concéntrico con el aro */}
-      <line
-        x1="44" y1="8" x2="44" y2="62"
-        stroke="rgba(255,255,255,0.35)"
-        strokeWidth="1.5"
-      />
-      <line
-        x1="356" y1="8" x2="356" y2="62"
-        stroke="rgba(255,255,255,0.35)"
-        strokeWidth="1.5"
-      />
-      <path
-        d="M 44 62 A 160 160 0 0 1 356 62"
-        fill="none"
-        stroke="rgba(255,255,255,0.35)"
-        strokeWidth="1.5"
-      />
+      <rect x="150" y="8" width="100" height="110" fill="currentColor" opacity="0.18" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="170" y1="20" x2="230" y2="20" stroke="currentColor" strokeWidth="2.5" />
+      <circle cx="200" cy="28" r="7" fill="rgb(245 158 11 / 0.55)" stroke="rgb(245 158 11 / 0.9)" strokeWidth="2" />
+      <line x1="44" y1="8" x2="44" y2="62" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="356" y1="8" x2="356" y2="62" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M 44 62 A 160 160 0 0 1 356 62" fill="none" stroke="currentColor" strokeWidth="1.5" />
     </svg>
   )
 }
 
 /* ------------------------------------------------------------------ */
-/* Slot con droppable + draggable chip                                 */
+/* Slot con droppable + draggable chip                                  */
 /* ------------------------------------------------------------------ */
-function CourtSlot({
-  posicion,
-  player,
-  pos,
-  onToggleStarter,
-  onSetCaptain,
-  onSell,
-  marketLocked,
-}) {
+function CourtSlot({ posicion, player, pos, onToggleStarter, onSetCaptain, onSell, marketLocked }) {
   return (
     <div
       className="absolute"
-      style={{
-        top: pos.top,
-        left: pos.left,
-        transform: 'translate(-50%, -50%)',
-        zIndex: player ? 10 : 5,
-      }}
+      style={{ top: pos.top, left: pos.left, transform: 'translate(-50%, -50%)', zIndex: player ? 10 : 5 }}
     >
       <CourtDropZone posicion={posicion}>
         {player ? (
@@ -288,13 +224,7 @@ function CourtSlot({
             onSetCaptain={() => onSetCaptain(player.jugador_id || player.id)}
             onSell={onSell ? () => onSell(player.jugador_id || player.id, player.nombre) : undefined}
             marketLocked={marketLocked}
-            tooltipAlign={
-              posicion === 'escolta'
-                ? 'left'
-                : posicion === 'ala-pivot'
-                  ? 'left'
-                  : 'right'
-            }
+            tooltipAlign={posicion === 'escolta' || posicion === 'ala-pivot' ? 'left' : 'right'}
           />
         ) : (
           <EmptyCourtSlot posicion={posicion} />
@@ -309,7 +239,7 @@ function CourtDropZone({ posicion, children }) {
   return (
     <div
       ref={setNodeRef}
-      className={`transition-all rounded-lg ${isOver ? 'ring-2 ring-yellow-400 ring-offset-2 ring-offset-amber-900 scale-105' : ''}`}
+      className={`transition-all rounded-lg ${isOver ? 'ring-2 ring-brand-500 ring-offset-2 ring-offset-amber-50 dark:ring-offset-stone-800 scale-105' : ''}`}
     >
       {children}
     </div>
@@ -317,7 +247,7 @@ function CourtDropZone({ posicion, children }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Bench (columna izquierda) - drop zone para devolver al banco        */
+/* Banco                                                                */
 /* ------------------------------------------------------------------ */
 function BenchDropZone({ bench, onToggleStarter, onSetCaptain, onSell, marketLocked }) {
   const { setNodeRef, isOver } = useDroppable({ id: 'bench' })
@@ -325,7 +255,13 @@ function BenchDropZone({ bench, onToggleStarter, onSetCaptain, onSell, marketLoc
   return (
     <div
       ref={setNodeRef}
-      className={`space-y-2 p-2 rounded-lg border-2 border-dashed transition-colors ${isOver ? 'border-yellow-400 bg-yellow-900/10' : 'border-gray-800/60'}`}
+      className={`
+        p-2 rounded-xl border-2 border-dashed transition-colors
+        grid grid-cols-5 md:grid-cols-1 gap-2
+        ${isOver
+          ? 'border-brand-500/60 bg-brand-500/5'
+          : 'border-surface-200 dark:border-surface-700'}
+      `}
     >
       {bench.map((player) => (
         <DraggablePlayerChip
@@ -333,7 +269,7 @@ function BenchDropZone({ bench, onToggleStarter, onSetCaptain, onSell, marketLoc
           player={player}
           position={player.posicion}
           sourceType="bench"
-          isBench={true}
+          isBench
           onToggleStarter={() => onToggleStarter(player.jugador_id || player.id)}
           onSetCaptain={() => onSetCaptain(player.jugador_id || player.id)}
           onSell={onSell ? () => onSell(player.jugador_id || player.id, player.nombre) : undefined}
@@ -342,7 +278,7 @@ function BenchDropZone({ bench, onToggleStarter, onSetCaptain, onSell, marketLoc
         />
       ))}
 
-      {[...Array(Math.max(0, 5 - bench.length))].map((_, i) => (
+      {Array.from({ length: Math.max(0, 5 - bench.length) }).map((_, i) => (
         <EmptyBenchSlot key={`bench-empty-${i}`} />
       ))}
     </div>
@@ -350,18 +286,11 @@ function BenchDropZone({ bench, onToggleStarter, onSetCaptain, onSell, marketLoc
 }
 
 /* ------------------------------------------------------------------ */
-/* Draggable wrapper                                                   */
+/* Draggable wrapper                                                    */
 /* ------------------------------------------------------------------ */
 function DraggablePlayerChip({
-  player,
-  position,
-  sourceType,
-  onToggleStarter,
-  onSetCaptain,
-  onSell,
-  marketLocked,
-  isBench = false,
-  tooltipAlign = 'right',
+  player, position, sourceType, onToggleStarter, onSetCaptain, onSell,
+  marketLocked, isBench = false, tooltipAlign = 'right',
 }) {
   const playerId = player.jugador_id || player.id
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -398,30 +327,22 @@ function DraggablePlayerChip({
 }
 
 /* ------------------------------------------------------------------ */
-/* Slots vacíos                                                        */
+/* Slots vacíos                                                         */
 /* ------------------------------------------------------------------ */
 function EmptyCourtSlot({ posicion }) {
   const navigate = useNavigate()
-  const posLabel =
-    posicion.charAt(0).toUpperCase() + posicion.slice(1).replace('-', ' ')
-
-  const colors = {
-    base: 'border-blue-400/40 text-blue-300/70 bg-blue-900/10 hover:bg-blue-900/30',
-    escolta: 'border-purple-400/40 text-purple-300/70 bg-purple-900/10 hover:bg-purple-900/30',
-    alero: 'border-green-400/40 text-green-300/70 bg-green-900/10 hover:bg-green-900/30',
-    'ala-pivot': 'border-orange-400/40 text-orange-300/70 bg-orange-900/10 hover:bg-orange-900/30',
-    pivot: 'border-red-400/40 text-red-300/70 bg-red-900/10 hover:bg-red-900/30',
-  }
+  const posLabel = posicion.charAt(0).toUpperCase() + posicion.slice(1).replace('-', ' ')
 
   return (
     <button
       type="button"
       onClick={() => navigate(`/market?posicion=${posicion}`)}
-      className={`w-24 h-16 flex flex-col items-center justify-center border-2 border-dashed rounded-lg ${colors[posicion]} text-center transition cursor-pointer group`}
+      className="w-20 sm:w-24 h-14 sm:h-16 flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-surface-300/80 dark:border-surface-600/60 bg-white/70 dark:bg-surface-900/30 text-surface-600 dark:text-surface-300 hover:border-brand-500/60 hover:bg-brand-500/5 transition-colors text-center"
       title={`Comprar un ${posLabel} en el mercado`}
+      aria-label={`Comprar un ${posLabel} en el mercado`}
     >
-      <ShoppingBag className="h-3 w-3 mb-0.5 opacity-70 group-hover:opacity-100" />
-      <p className="text-[10px] font-semibold uppercase">{posLabel}</p>
+      <ShoppingBag className="h-3 w-3 mb-0.5 opacity-70" aria-hidden="true" />
+      <p className="text-[10px] font-semibold uppercase tracking-wide">{posLabel}</p>
       <p className="text-[9px] mt-0.5 opacity-80">Comprar</p>
     </button>
   )
@@ -429,7 +350,10 @@ function EmptyCourtSlot({ posicion }) {
 
 function EmptyBenchSlot() {
   return (
-    <div className="w-20 h-16 flex items-center justify-center border-2 border-dashed border-gray-700/40 rounded-lg text-gray-600/50">
+    <div
+      className="w-full h-14 md:h-16 flex items-center justify-center rounded-lg border border-dashed border-surface-200 dark:border-surface-700/60 text-surface-400 dark:text-surface-600"
+      aria-hidden="true"
+    >
       <span className="text-xs">–</span>
     </div>
   )

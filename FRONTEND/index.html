@@ -1,11 +1,31 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" class="dark">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/basketball.svg" />
+    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Gran Coach LNB - Fantasy Basketball</title>
-    <meta name="description" content="El juego de fantasy basketball de la Liga Nacional de Básquet Argentina" />
+    <meta name="theme-color" content="#09090b" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
+    <title>Gran Coach LNB — Fantasy Basketball</title>
+    <meta name="description" content="El juego de fantasy basketball de la Liga Nacional de Básquet Argentina. Armá tu equipo, manejá tu presupuesto y competí contra todos." />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
+
+    <script>
+      // Prevenir flash incorrecto de tema antes del render de React
+      (function () {
+        try {
+          var stored = localStorage.getItem('theme');
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var isDark = stored ? stored === 'dark' : prefersDark || stored === null;
+          var root = document.documentElement;
+          if (isDark) root.classList.add('dark');
+          else root.classList.remove('dark');
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

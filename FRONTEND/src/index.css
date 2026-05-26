@@ -3,13 +3,72 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    color-scheme: light;
+  }
+  .dark {
+    color-scheme: dark;
+  }
+
+  html, body, #root {
+    @apply h-full;
+  }
+
   body {
-    @apply bg-gray-950 text-gray-100 antialiased;
+    @apply bg-surface-50 text-surface-900 antialiased font-sans;
+    @apply dark:bg-surface-950 dark:text-surface-100;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Selección de texto coherente con el accent */
+  ::selection {
+    @apply bg-brand-500/30 text-surface-900;
+  }
+  .dark ::selection {
+    @apply bg-brand-400/30 text-surface-50;
+  }
+
+  /* Tipografía base — jerarquía consistente */
+  h1 { @apply tracking-tight; }
+  h2 { @apply tracking-tight; }
+
+  /* Focus visible consistente para teclado */
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand-500/60 ring-offset-2 ring-offset-surface-50 dark:ring-offset-surface-950;
   }
 }
 
 @layer components {
   .page-container {
-    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8;
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8;
+  }
+
+  /* Skeleton shimmer */
+  .skeleton {
+    @apply relative overflow-hidden bg-surface-200 dark:bg-surface-800 rounded-md;
+  }
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background-image: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.04) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+    animation: skeleton-shimmer 1.6s ease-in-out infinite;
+  }
+  .dark .skeleton::after {
+    background-image: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.06) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+  }
+  @keyframes skeleton-shimmer {
+    100% { transform: translateX(100%); }
   }
 }

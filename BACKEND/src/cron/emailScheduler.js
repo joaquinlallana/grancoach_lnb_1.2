@@ -17,7 +17,7 @@ function scheduleWeekendRankingEmail() {
         return;
       }
 
-      const generalRanking = await RankingRepository.getRankingGeneral({ page: 1, limit: 100 });
+      const { ranking: generalRanking } = await RankingRepository.getRankingGeneral({ page: 1, limit: 100 });
       const weeklyRanking = await RankingRepository.getLastClosedWeekRanking();
 
       if (!generalRanking || !weeklyRanking) {

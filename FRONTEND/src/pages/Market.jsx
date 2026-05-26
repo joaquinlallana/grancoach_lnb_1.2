@@ -1,21 +1,22 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, ShoppingBag } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ShoppingBag, Lock } from 'lucide-react'
 import { usePlayers, useMarketStatus } from '../hooks/useMarket'
 import { useTeam } from '../hooks/useTeam'
 import { PlayerCard } from '../components/market/PlayerCard'
 import { PlayerFilters } from '../components/market/PlayerFilters'
 import { BudgetBar } from '../components/market/BudgetBar'
-import { Card, CardHeader } from '../components/ui/Card'
-import { PageSpinner } from '../components/ui/Spinner'
+import { Card } from '../components/ui/Card'
+import { SkeletonCard } from '../components/ui/Skeleton'
 import { EmptyState } from '../components/ui/EmptyState'
 import { Button } from '../components/ui/Button'
+import { Badge } from '../components/ui/Badge'
 
 export function Market() {
   const [searchParams] = useSearchParams()
   const initialPosicion = searchParams.get('posicion') || undefined
   const [filters, setFilters] = useState({ page: 1, limit: 20, posicion: initialPosicion })
-  const { data: playersData, isLoading } = usePlayers(filters)
+  const { data: playersData, isLoading, isFetching } = usePlayers(filters)
   const { data: marketStatus } = useMarketStatus()
   const { data: team } = useTeam()
 
@@ -29,42 +30,51 @@ export function Market() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white">Mercado de Jugadores</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-surface-900 dark:text-surface-50">
+            Mercado de jugadores
+          </h1>
           {marketStatus && (
-            <p className={`text-sm mt-1 ${isLocked ? 'text-red-400' : 'text-green-400'}`}>
-              Mercado {marketStatus.estado}
-            </p>
+            <div className="mt-2 flex items-center gap-2">
+              <Badge label={marketStatus.estado} type="status" />
+              <span className="text-xs text-surface-500 dark:text-surface-400">
+                {isLocked ? 'Sin transferencias hasta el cierre' : 'Transferencias habilitadas'}
+              </span>
+            </div>
           )}
         </div>
-      </div>
+      </header>
 
-      {/* Budget */}
       {team && (
         <Card>
           <BudgetBar remaining={budget} initial={team.presupuesto_inicial || 100_000_000} />
         </Card>
       )}
 
-      {/* Locked warning */}
       {isLocked && (
-        <div className="p-4 rounded-xl bg-red-900/20 border border-red-800 text-red-300 text-sm">
-          ⚠️ El mercado está cerrado durante la jornada activa. No podés realizar transferencias hasta que termine.
+        <div className="flex items-start gap-3 p-4 rounded-2xl bg-rose-500/5 border border-rose-500/20 text-rose-700 dark:text-rose-300 text-sm">
+          <Lock className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
+          <p>
+            El mercado está cerrado durante la jornada activa.
+            No podés realizar transferencias hasta que termine.
+          </p>
         </div>
       )}
 
-      {/* Filters */}
       <PlayerFilters filters={filters} onChange={setFilters} />
 
-      {/* Grid */}
       {isLoading ? (
-        <PageSpinner />
+        <div
+          className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 ${isFetching ? 'opacity-90' : ''}`}
+        >
+          {Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)}
+        </div>
       ) : players.length === 0 ? (
         <EmptyState
           icon={ShoppingBag}
-          title="No se encontraron jugadores"
-          description="Probá con otros filtros de búsqueda"
+          title="Sin resultados"
+          description="No encontramos jugadores con esos filtros. Probá ajustar la búsqueda."
         />
       ) : (
         <>
@@ -80,31 +90,33 @@ export function Market() {
             ))}
           </div>
 
-          {/* Pagination */}
           {pagination.totalPages > 1 && (
-            <div className="flex items-center justify-center gap-4 pt-4">
+            <nav
+              className="flex items-center justify-center gap-3 pt-2"
+              aria-label="Paginación del mercado"
+            >
               <Button
-                variant="secondary"
+                variant="outline"
                 size="sm"
+                iconLeft={ChevronLeft}
                 onClick={() => goTo(pagination.page - 1)}
                 disabled={pagination.page <= 1}
               >
-                <ChevronLeft className="h-4 w-4" />
                 Anterior
               </Button>
-              <span className="text-sm text-gray-400">
+              <span className="text-sm text-surface-600 dark:text-surface-400 tabular-nums">
                 Página {pagination.page} de {pagination.totalPages}
               </span>
               <Button
-                variant="secondary"
+                variant="outline"
                 size="sm"
+                iconRight={ChevronRight}
                 onClick={() => goTo(pagination.page + 1)}
                 disabled={pagination.page >= pagination.totalPages}
               >
                 Siguiente
-                <ChevronRight className="h-4 w-4" />
               </Button>
-            </div>
+            </nav>
           )}
         </>
       )}

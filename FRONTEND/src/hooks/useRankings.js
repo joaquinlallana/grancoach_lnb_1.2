@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { rankingsApi } from '../api/rankings'
+import { gameweeksApi } from '../api/gameweeks'
 import { useAuth } from './useAuth'
 
 export function useGlobalRanking(params) {
@@ -24,11 +25,8 @@ export function useMyScore() {
 export function useCurrentGameweek() {
   return useQuery({
     queryKey: ['gameweek', 'current'],
-    queryFn: async () => {
-      const { gameweeksApi } = await import('../api/gameweeks')
-      return gameweeksApi.getCurrent()
-    },
+    queryFn: gameweeksApi.getCurrent,
     select: (data) => data.data,
-    refetchInterval: 120000,
+    refetchInterval: 120_000,
   })
 }

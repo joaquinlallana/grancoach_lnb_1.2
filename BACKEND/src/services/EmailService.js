@@ -10,18 +10,28 @@ function initializeTransporter() {
   }
 
   if (!process.env.SMTP_HOST || !process.env.SMTP_PORT || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
-    console.warn('EmailService: SMTP environment variables not configured, emails disabled');
+    console.warn('[EmailService] SMTP environment variables not configured, emails disabled');
     return null;
   }
 
+  const port = parseInt(process.env.SMTP_PORT);
+  const isSecurePort = port === 465;
+
   return nodemailer.createTransport({
     host: process.env.SMTP_HOST,
-    port: parseInt(process.env.SMTP_PORT),
-    secure: parseInt(process.env.SMTP_PORT) === 465,
+    port,
+    secure: isSecurePort,
+    requireTLS: !isSecurePort, // STARTTLS obligatorio en port 587 (Mailtrap)
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
+    tls: {
+      rejectUnauthorized: process.env.NODE_ENV === 'production',
+    },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 30000,
   });
 }
 
@@ -35,8 +45,8 @@ function getTransporter() {
 async function sendEmail(to, subject, htmlContent) {
   const trans = getTransporter();
   if (!trans) {
-    console.log(`[EMAILS DISABLED] Would send to ${to}: ${subject}`);
-    return Promise.resolve();
+    console.log(`[EmailService] Disabled — would send to ${to}: ${subject}`);
+    return;
   }
 
   try {
@@ -46,9 +56,37 @@ async function sendEmail(to, subject, htmlContent) {
       subject,
       html: htmlContent,
     });
-    console.log(`Email sent to ${to}: ${subject}`);
+    console.log(`[EmailService] Sent to ${to}: ${subject}`);
   } catch (err) {
-    console.error(`Error sending email to ${to}:`, err.message);
+    if (err.code === 'EAUTH' || err.responseCode === 535) {
+      console.error(`[EmailService] Auth error — check SMTP_USER/SMTP_PASS:`, err.message);
+    } else if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND') {
+      console.error(`[EmailService] Cannot connect to ${process.env.SMTP_HOST}:${process.env.SMTP_PORT} — check SMTP_HOST/SMTP_PORT:`, err.message);
+    } else if (err.code === 'ETIMEDOUT' || err.code === 'ESOCKET') {
+      console.error(`[EmailService] Timeout sending to ${to}:`, err.message);
+    } else {
+      console.error(`[EmailService] Error sending to ${to}:`, err.message);
+    }
+  }
+}
+
+async function verifyConnection() {
+  const trans = getTransporter();
+  if (!trans) return false;
+
+  try {
+    await trans.verify();
+    console.log('[EmailService] SMTP connection verified successfully');
+    return true;
+  } catch (err) {
+    if (err.code === 'EAUTH' || err.responseCode === 535) {
+      console.error('[EmailService] SMTP auth failed — check SMTP_USER/SMTP_PASS');
+    } else if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND') {
+      console.error(`[EmailService] Cannot connect to ${process.env.SMTP_HOST}:${process.env.SMTP_PORT}`);
+    } else {
+      console.error('[EmailService] SMTP verification failed:', err.message);
+    }
+    return false;
   }
 }
 
@@ -252,22 +290,23 @@ function templateWindowClose() {
 }
 
 function templateWeekendRanking(user, generalRanking, weeklyRanking) {
-  const userPositionGeneral = generalRanking.findIndex(r => r.id === user.id) + 1 || '-';
-  const userPositionWeekly = weeklyRanking.findIndex(r => r.id === user.id) + 1 || '-';
+  const isMe = (r) => r.email === user.email;
+  const userPositionGeneral = generalRanking.findIndex(isMe) + 1 || '-';
+  const userPositionWeekly = weeklyRanking.findIndex(isMe) + 1 || '-';
 
   const generalHTML = generalRanking.slice(0, 10)
-    .map((r, i) => `<tr ${r.id === user.id ? 'style="background-color: #fff3e0;"' : ''}>
+    .map((r, i) => `<tr ${isMe(r) ? 'style="background-color: #fff3e0;"' : ''}>
       <td style="padding: 8px; border-bottom: 1px solid #ddd;">${i + 1}</td>
-      <td style="padding: 8px; border-bottom: 1px solid #ddd;">${r.usuario || r.nombre}</td>
+      <td style="padding: 8px; border-bottom: 1px solid #ddd;">${r.usuario || r.usuario_nombre || r.nombre}</td>
       <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right;"><strong>${r.puntos_totales || r.total_puntos || 0}</strong></td>
     </tr>`)
     .join('');
 
   const weeklyHTML = weeklyRanking.slice(0, 10)
-    .map((r, i) => `<tr ${r.id === user.id ? 'style="background-color: #fff3e0;"' : ''}>
+    .map((r, i) => `<tr ${isMe(r) ? 'style="background-color: #fff3e0;"' : ''}>
       <td style="padding: 8px; border-bottom: 1px solid #ddd;">${i + 1}</td>
-      <td style="padding: 8px; border-bottom: 1px solid #ddd;">${r.usuario || r.nombre}</td>
-      <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right;"><strong>${r.puntos || 0}</strong></td>
+      <td style="padding: 8px; border-bottom: 1px solid #ddd;">${r.usuario || r.usuario_nombre || r.nombre}</td>
+      <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right;"><strong>${r.puntos_totales || 0}</strong></td>
     </tr>`)
     .join('');
 
@@ -427,4 +466,5 @@ module.exports = {
   sendWindowOpen,
   sendWindowClose,
   sendWeekendRanking,
+  verifyConnection,
 };

@@ -91,9 +91,13 @@ if (require.main === module) {
     console.log(`✅ Fantasy LNB API corriendo en http://localhost:${PORT}`);
     console.log(`📊 Entorno: ${process.env.NODE_ENV || 'development'}`);
 
-    // Iniciar cron job de envío de emails fin de semana
+    // Iniciar servicio de emails (verificación SMTP + cron de ranking semanal)
     if (process.env.EMAILS_ENABLED === 'true') {
-      console.log(`📧 Iniciando cron job de emails fin de semana...`);
+      const EmailService = require('./services/EmailService');
+      EmailService.verifyConnection().then(ok => {
+        if (!ok) console.warn('[EmailService] Warning: SMTP no disponible — los emails no se entregarán');
+      });
+
       try {
         const { scheduleWeekendRankingEmail } = require('./cron/emailScheduler');
         scheduleWeekendRankingEmail();

@@ -17,6 +17,7 @@ API REST para el juego de Fantasy Basketball de la Liga Nacional de Básquet (LN
 - **Validación:** express-validator
 - **Seguridad:** helmet, cors, express-rate-limit
 - **Cron:** node-cron (carga progresiva de stats opcional)
+- **Email:** nodemailer + **Mailtrap SMTP** (`live.smtp.mailtrap.io:587`)
 - **Sync externa:** api-basketball.com (LNB `leagueId=18`, plan free 100 req/día, 10 req/min)
 
 ---
@@ -108,6 +109,13 @@ CORS_ORIGIN=http://localhost:5173
 API_BASKETBALL_KEY=tu_key
 API_BASKETBALL_LEAGUE_ID=18
 API_BASKETBALL_SEASON=2024-2025
+
+# Emails (opcional — ver sección Email más abajo)
+EMAILS_ENABLED=false
+SMTP_HOST=live.smtp.mailtrap.io
+SMTP_PORT=587
+SMTP_USER=api
+SMTP_PASS=tu_mailtrap_api_token
 
 # Cron de carga progresiva (opcional)
 TESTING_CRON=false
@@ -333,6 +341,43 @@ Lo realiza la base de datos mediante vistas:
 
 ---
 
+## Email (Mailtrap SMTP)
+
+El sistema envía emails transaccionales mediante **Mailtrap** (`live.smtp.mailtrap.io:587`, STARTTLS).
+
+Por defecto los emails están **deshabilitados** (`EMAILS_ENABLED=false`). Para activarlos:
+
+1. Crear cuenta en [mailtrap.io](https://mailtrap.io)
+2. Verificar un dominio de envío → pestaña **Integrations** → **SMTP** → copiar el API token
+3. Configurar `.env`:
+
+```env
+EMAILS_ENABLED=true
+SMTP_HOST=live.smtp.mailtrap.io
+SMTP_PORT=587
+SMTP_USER=api
+SMTP_PASS=tu_api_token_de_mailtrap
+SMTP_FROM="Gran Coach LNB <noreply@tu-dominio.com>"
+FRONTEND_URL=http://localhost:5173
+```
+
+Al arrancar con emails habilitados, el servidor verifica la conexión SMTP y lo reporta en consola.
+
+Emails que se envían automáticamente:
+
+| Evento | Función |
+|--------|---------|
+| Registro de usuario | `sendWelcome` |
+| Compra / venta / transferencia | `sendMarketChange` |
+| Guardado de alineación | `sendLineupUpdate` |
+| Apertura del mercado | `sendWindowOpen` |
+| Cierre del mercado | `sendWindowClose` |
+| Ranking semanal (lunes 00:00 UTC) | `sendWeekendRanking` |
+
+Ver documentación detallada: [MAILTRAP_INTEGRATION.md](./MAILTRAP_INTEGRATION.md)
+
+---
+
 ## Producción
 
 1. `NODE_ENV=production`.
@@ -351,6 +396,7 @@ Lo realiza la base de datos mediante vistas:
 - [../ANALISIS_ERRORES.md](../ANALISIS_ERRORES.md) — bugs detectados, todos resueltos en la última auditoría.
 - [../RESUMEN_EJECUTIVO.md](../RESUMEN_EJECUTIVO.md) — resumen visual de los fixes aplicados.
 - [Documentacion_Base_de_Datos_GranCoach_2.0.md](./Documentacion_Base_de_Datos_GranCoach_2.0.md) — schema completo.
+- [MAILTRAP_INTEGRATION.md](./MAILTRAP_INTEGRATION.md) — configuración y uso del servicio de emails.
 - [backup/BACKUP_GUIDE.md](./backup/BACKUP_GUIDE.md) — guía de respaldo.
 
 ---

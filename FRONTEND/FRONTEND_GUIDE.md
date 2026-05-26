@@ -36,14 +36,16 @@ El frontend estará disponible en `http://localhost:5173`.
 |---|---|---|
 | React | 18 | Framework UI |
 | Vite | 5 | Build tool y dev server |
-| TailwindCSS | 3 | Estilos utility-first |
+| TailwindCSS | 3 (darkMode: 'class') | Estilos utility-first + design tokens |
 | React Router | 6 | Navegación SPA |
 | TanStack Query | 5 | Cache y sincronización con el servidor |
-| Zustand | 4 | Estado global del cliente (auth) |
+| Zustand | 4 | Estado global cliente (auth + theme) |
 | Axios | 1.7 | Cliente HTTP con interceptores |
 | React Hook Form | 7 | Manejo de formularios |
 | Lucide React | latest | Íconos SVG |
 | React Hot Toast | 2 | Notificaciones emergentes |
+| Inter | Google Fonts | Tipografía UI (pesos 400–800) |
+| @dnd-kit/core + utilities | 6.3 / 3.2 | Drag-and-drop del CourtView |
 
 ---
 
@@ -52,14 +54,17 @@ El frontend estará disponible en `http://localhost:5173`.
 ```
 src/
 ├── api/           ← Funciones que llaman a los endpoints del backend
-├── store/         ← Estado global con Zustand (solo autenticación)
+├── store/         ← Zustand: authStore (token + user), themeStore (dark/light)
 ├── hooks/         ← Hooks de React Query para datos del servidor
 ├── components/    ← Componentes reutilizables organizados por dominio
-│   ├── ui/        ← Primitivas: Button, Card, Badge, Spinner, EmptyState
-│   ├── layout/    ← Navbar, Layout, PrivateRoute, AdminRoute
+│   ├── ui/        ← Primitivas: Button, Card, Badge, Spinner, Skeleton, EmptyState,
+│   │              Input, Select, FormField, ErrorBoundary, ThemeToggle, Logo
+│   ├── layout/    ← Navbar (con ThemeToggle), Layout (con ErrorBoundary),
+│   │              PrivateRoute, AdminRoute
 │   ├── market/    ← PlayerCard, PlayerFilters, BudgetBar
-│   ├── team/      ← RosterPlayer, LineupGrid
-│   └── rankings/  ← RankingTable
+│   ├── team/      ← CourtView (responsive + DnD), PlayerChip
+│   ├── rankings/  ← RankingTable
+│   └── dashboard/ ← StatCard
 └── pages/         ← Una página por ruta de la app
 ```
 
@@ -119,23 +124,26 @@ src/
 - Bloquea los botones si el mercado está cerrado o el presupuesto es insuficiente
 
 ### Mi Equipo
-- Muestra la plantilla completa separada en Titulares y Suplentes
-- Permite toggle titular/suplente con feedback visual inmediato (cambios locales)
-- Permite asignar el capitán (multiplicador ×2, solo entre titulares)
-- El botón "Guardar cambios" envía `PATCH /api/fantasy-team/lineup` con todos los jugadores y sus estados
-- Muestra advertencia si hay transferencias penalizadas en la jornada actual (-20 pts c/u)
-- Bloquea cambios si la jornada está cerrada
+- `CourtView` con **drag-and-drop** (`@dnd-kit`). En desktop: banco a la izquierda + cancha a la derecha. En mobile: cancha arriba + banco en grid 5-columnas debajo.
+- Arrastrar un suplente al slot de su posición lo asciende a titular (con swap automático si el slot está ocupado).
+- Validación de posición al soltar (toast de error si la posición no coincide).
+- Botones inline en cada chip: capitán (corona dorada) y vender (acción confirmada).
+- Slot vacío en cancha → botón que lleva al mercado con `?posicion=` pre-aplicado.
+- "Guardar cambios" envía `PATCH /api/fantasy-team/lineup` con todos los jugadores y sus estados.
+- Muestra advertencia si hay transferencias penalizadas en la jornada actual (−20 pts c/u).
+- Bloquea cambios si la jornada está cerrada.
 
 **Reglas del juego mostradas en la UI:**
 - Capitán = ×2 puntos
 - Titular = ×1 punto · Suplente = ×0.5 puntos
-- 1 transferencia gratis por jornada; las siguientes tienen penalización de -20 pts
+- 2 transferencias gratis por jornada; las siguientes tienen penalización de −20 pts c/u
 
 ### Ranking
-- Tabla paginada (`GET /api/rankings/global`)
-- La fila del usuario autenticado se resalta en azul
-- Muestra medallas 🥇🥈🥉 para los primeros 3 lugares
-- Columnas: Posición, Equipo, Usuario, Puntos totales, Presupuesto restante
+- Tabla paginada (`GET /api/rankings/global`).
+- La fila del usuario autenticado se resalta con borde lateral acento dorado (no fondo saturado).
+- Top 3: badge numérico con fondo dorado sutil (`bg-brand-500/15`). Sin emojis de medallas.
+- Skeleton rows durante la carga.
+- Columnas: Posición, Equipo, Usuario, Puntos totales, Presupuesto restante. En mobile, Usuario y Presupuesto se ocultan responsivamente.
 
 ### Panel Admin
 - Solo visible para usuarios con `es_admin = true`
@@ -213,12 +221,44 @@ Modificadores de lineup:
 
 ---
 
-## Variables de entorno (opcional)
+## Variables de entorno
 
-Crear un archivo `.env.local` en la raíz de FRONTEND:
+- **Desarrollo:** no es necesario. `vite.config.js` proxea `/api` → `http://localhost:3000`.
+- **Producción:** crear `.env` (o `.env.local`) en la raíz de FRONTEND con:
 
 ```env
-VITE_API_URL=http://localhost:3000
+VITE_API_URL=https://api.tudominio.com
 ```
 
-Por defecto el proxy de Vite maneja el redireccionamiento, por lo que no es necesario en desarrollo.
+`src/api/axios.js` detecta esta variable y compone `${VITE_API_URL}/api` como baseURL. Si no está definida, usa `/api` relativo (proxy en dev).
+
+---
+
+## Sistema de diseño y tema dark/light
+
+El frontend usa **design tokens semánticos** definidos en `tailwind.config.js`:
+
+- `brand-50…950` — escala dorada para acentos premium (CTAs, capitán, top-3).
+- `surface-50…950` — escala neutra (zinc-based) para fondos, cards y bordes en ambos temas.
+- Tipografía: **Inter** (Google Fonts) con escala `text-display-*` para titulares.
+
+### Cómo agregar un componente nuevo con soporte dark/light
+
+1. Fondos y bordes: `bg-white dark:bg-surface-900`, `border-surface-200 dark:border-surface-800`.
+2. Texto: `text-surface-900 dark:text-surface-50` (principal), `text-surface-600 dark:text-surface-400` (secundario), `text-surface-500` (terciario).
+3. Acentos: `text-brand-600 dark:text-brand-400` para enlaces e iconos destacados.
+4. Semánticos: preferir formato `bg-emerald-500/10 ring-1 ring-inset ring-emerald-500/20 text-emerald-700 dark:text-emerald-300` en lugar de colores sólidos saturados.
+
+### ThemeToggle
+
+`<ThemeToggle />` está en la `Navbar` (modo autenticado) y en el header de las páginas públicas (`Landing`, `Login`, `Register`). El estado se persiste en `localStorage` bajo la clave `theme`. Un script inline en `index.html` aplica la clase `dark` antes del primer render para evitar flash.
+
+---
+
+## Manejo de errores y resiliencia
+
+- **ErrorBoundary global** en `App.jsx` envuelve todas las rutas; captura crashes de render y muestra un fallback con botón de recarga.
+- **ErrorBoundary local** en `Layout.jsx` aísla páginas privadas: si una página crashea, la navbar y el toggle de tema siguen disponibles.
+- **Axios interceptors** (`src/api/axios.js`) manejan JWT expirado y 401.
+- **React Query** maneja errores async: los hooks (`useTeam`, `useMarket`, `useRankings`) propagan `isLoading`, `isError`, `error` al consumidor.
+- **Skeletons** (`SkeletonCard`, `SkeletonRow`) reemplazan spinners genéricos en grids y tablas para mejor percepción de velocidad.

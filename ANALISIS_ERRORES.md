@@ -1,26 +1,28 @@
 # 🔴 ANÁLISIS DE ERRORES — AUDITORÍA COMPLETA
 
-> **Última actualización:** 2026-05-15
-> **Versión:** 1.3 (post-reglamento oficial + tests ampliados)
-> **Resultado global:** ✅ **15/15 bugs resueltos** — **112/112 tests passing** — el juego es jugable end-to-end y respeta el reglamento oficial.
+> **Última actualización:** 2026-05-26
+> **Versión:** 1.5 (auditoría de queries DB post-restore de backup)
+> **Resultado global:** ✅ **18/18 bugs resueltos** — **112/112 tests passing** — el juego es jugable end-to-end y respeta el reglamento oficial.
 
 ---
 
 ## Resumen ejecutivo
 
-Se realizaron **cuatro fases**:
+Se realizaron **cinco fases**:
 
 1. **Auditoría inicial (v1.0):** identificó 7 bugs críticos en backend (lógica de negocio).
 2. **Auditoría 2026-05-10 (v1.2):** verificó la auditoría inicial y descubrió **4 bugs nuevos** (1 lógica, 1 seguridad rutas, 2 UX frontend). Total: 11 bugs.
 3. **Suite de tests inicial (v1.3 alpha):** 102 tests automatizados.
 4. **Reglamento oficial + bugs ranking (v1.3 — 2026-05-15):** **4 bugs adicionales** corregidos al aplicar el reglamento oficial. Total: 15 bugs. **112 tests passing**.
+5. **Auditoría de queries DB post-restore (v1.5 — 2026-05-26):** tras restaurar el backup en local se auditaron las **44 queries SQL** del backend contra el schema real (14 tablas + 12 vistas + 9 funciones). **3 bugs adicionales** en el cron de email semanal. Total: 18 bugs.
 
-| Capa | Originales | Auditoría 2026-05-10 | v1.3 (2026-05-15) | Estado | Tests |
-|------|-----------|---------------------|-------------------|--------|-------|
-| Backend (lógica) | 7 | 1 (changePassword) | 2 (config inicial, umbral transferencias) | ✅ RESUELTOS | market, lineup, auth |
-| Backend (seguridad) | 0 | 1 (rutas gameweeks sin isAdmin) | 0 | ✅ RESUELTO | gameweeks (8 casos) |
-| Backend (datos) | 0 | 0 | 1 (posiciones todas como base) | ✅ RESUELTO | script updatePlayerPositions |
-| Frontend (UX) | 0 | 2 (PlayerCard, token expirado) | 1 (ranking campos mismatched) | ✅ RESUELTOS | manual |
+| Capa | Originales | Auditoría 2026-05-10 | v1.3 (2026-05-15) | v1.5 (2026-05-26) | Estado | Tests |
+|------|-----------|---------------------|-------------------|-------------------|--------|-------|
+| Backend (lógica) | 7 | 1 (changePassword) | 2 (config inicial, umbral transferencias) | 0 | ✅ RESUELTOS | market, lineup, auth |
+| Backend (seguridad) | 0 | 1 (rutas gameweeks sin isAdmin) | 0 | 0 | ✅ RESUELTO | gameweeks (8 casos) |
+| Backend (datos) | 0 | 0 | 1 (posiciones todas como base) | 0 | ✅ RESUELTO | script updatePlayerPositions |
+| Backend (queries DB) | 0 | 0 | 0 | 3 (SQL inválido + acople cron/email) | ✅ RESUELTOS | 112 tests passing post-fix |
+| Frontend (UX) | 0 | 2 (PlayerCard, token expirado) | 1 (ranking campos mismatched) | 0 | ✅ RESUELTOS | manual |
 
 ---
 
@@ -265,6 +267,135 @@ Al aplicar el [Reglamento Oficial](Reglamento%20Oficial-%20GranCoachLNB.txt) (20
 | **Art. II — Suplentes** | 2 perimetrales + 2 internos + 1 comodín | Cualquier combinación de 5 suplentes | LineupService valida ≥2 perim y ≥2 int |
 | **Art. V — Transferencias** | 2 gratis por semana | Solo 1 gratis | `TRANSFERENCIAS_LIBRES_POR_JORNADA = 2` |
 | **Art. V — Configuración inicial** | (implícito: armar plantilla no es transferencia) | Cada compra inicial se contaba | `debePenalizar()` retorna `false` si no hay snapshots |
+
+---
+
+## 🆕 AUDITORÍA DE QUERIES DB (v1.5 — 2026-05-26)
+
+**Contexto:** tras varios meses sin backup local, se restauró el dump `BACKUP_GUIDE.md → backup_grancoach_lnb_2026-05-26_19-33-46.sql` en una instalación limpia de PostgreSQL 16. Aprovechando el schema vivo, se ejecutó una auditoría exhaustiva cruzando **cada SQL** del backend (44 queries en 11 repositorios + 7 servicios + 5 controllers + 3 scripts + 1 cron) contra:
+
+- **14 tablas:** `usuarios`, `equipos_fantasy`, `equipo_fantasy_jugadores`, `equipos_lnb`, `jugadores`, `posiciones`, `jornadas`, `partidos`, `estadisticas`, `lineup_snapshots`, `transferencias`, `audit_log`, `audit_presupuesto`, `sync_log`.
+- **12 vistas:** `estado_mercado`, `ranking_general_completo`, `ranking_por_jornada`, `total_equipo_por_jornada`, `puntos_equipo_por_jornada`, `puntos_jugador_por_jornada`, `puntos_fantasy_por_partido`, etc.
+- **9 funciones:** `capturar_lineup_snapshot`, `controlar_presupuesto`, `devolver_presupuesto`, `bloquear_si_jornada_cerrada`, `limitar_jugadores_por_equipo`, `limitar_jugadores_por_equipo_lnb`, `validar_estadisticas`, `registrar_cambio_presupuesto`, `reset_presupuesto_temporada`.
+
+Toda la capa de mercado, scoring, auth y sync verificó **0 errores**. Los 3 hallazgos se concentran en el flujo del **email semanal de ranking** (cron de lunes 00:00 UTC).
+
+### ✅ BUG 16 — SQL inválido: referencia a columna inexistente `rj.puntos`
+
+**Archivo:** [BACKEND/src/repositories/RankingRepository.js:91](BACKEND/src/repositories/RankingRepository.js#L91)
+**Severidad:** 🔴 CRÍTICO — la query falla en todo invocación del cron.
+**Estado:** ✅ RESUELTO en v1.5.
+
+**Problema:**
+```javascript
+// getLastClosedWeekRanking()
+const result = await query(
+  `SELECT
+    rj.equipo_fantasy_id as id,
+    ef.nombre AS equipo_nombre,
+    u.nombre AS usuario_nombre,
+    u.id as usuario_id,
+    rj.puntos AS puntos,         // ❌ columna no existe
+    rj.puntos_totales
+   FROM ranking_por_jornada rj
+   ...`
+);
+```
+
+La vista `ranking_por_jornada` (verificada con `\d+`) tiene únicamente las columnas: `equipo_fantasy_id`, `jornada_id`, `puntos_totales`, `rank`. Reproducido en vivo:
+
+```
+ERROR:  column rj.puntos does not exist
+LINE 7:   rj.puntos AS puntos,
+          ^
+```
+
+**Impacto:** el cron de [emailScheduler.js:21](BACKEND/src/cron/emailScheduler.js#L21) llama a `getLastClosedWeekRanking()` cada lunes 00:00 UTC para el email semanal — la excepción se captura silenciosamente en el `try/catch` y se loggea `[CRON] Error in weekend ranking email job`. **Ningún usuario ha recibido el email semanal desde que se programó el cron.**
+
+**Fix aplicado:** se eliminó la línea `rj.puntos AS puntos,` y se agregó `u.email AS email` (necesario para el fix del BUG 18). `rj.puntos_totales` ya estaba en el `SELECT`.
+
+```javascript
+const result = await query(
+  `SELECT
+    rj.equipo_fantasy_id as id,
+    ef.nombre AS equipo_nombre,
+    u.nombre AS usuario_nombre,
+    u.id as usuario_id,
+    u.email AS email,
+    rj.puntos_totales
+   FROM ranking_por_jornada rj
+   ...`
+);
+```
+
+### ✅ BUG 17 — Acople incorrecto entre `RankingRepository.getRankingGeneral` y el cron
+
+**Archivo:** [BACKEND/src/cron/emailScheduler.js:20](BACKEND/src/cron/emailScheduler.js#L20)
+**Severidad:** 🟠 ALTO — bloquea el email aunque BUG 16 esté resuelto.
+**Estado:** ✅ RESUELTO en v1.5.
+
+**Problema:**
+```javascript
+const generalRanking = await RankingRepository.getRankingGeneral({ page: 1, limit: 100 });
+// ...
+await EmailService.sendWeekendRanking(users, { generalRanking, weeklyRanking });
+```
+
+`RankingRepository.getRankingGeneral` devuelve `{ ranking, total, page, limit, totalPages }` (objeto paginado), no un array. En [EmailService.js:447](BACKEND/src/services/EmailService.js#L447) hay un guard:
+
+```javascript
+if (!Array.isArray(generalRanking) || !Array.isArray(weeklyRanking)) {
+  console.error('sendWeekendRanking: rankings must be arrays');
+  return; // ← retorna sin enviar nada
+}
+```
+
+**Impacto:** incluso después de arreglar BUG 16, el guard rechaza el envío y el email nunca sale.
+
+**Fix aplicado:** destructurar la propiedad `ranking` del objeto retornado:
+```javascript
+const { ranking: generalRanking } = await RankingRepository.getRankingGeneral({ page: 1, limit: 100 });
+```
+
+### ✅ BUG 18 — Comparación de IDs incorrecta en `templateWeekendRanking`
+
+**Archivo:** [BACKEND/src/services/EmailService.js:292-294](BACKEND/src/services/EmailService.js#L292-L294)
+**Severidad:** 🟡 MEDIO — el email sale, pero la posición del usuario siempre cae a `'-'` y el resaltado de su fila no funciona.
+**Estado:** ✅ RESUELTO en v1.5.
+
+**Problema:**
+```javascript
+function templateWeekendRanking(user, generalRanking, weeklyRanking) {
+  const userPositionGeneral = generalRanking.findIndex(r => r.id === user.id) + 1 || '-';
+  const userPositionWeekly  = weeklyRanking.findIndex(r => r.id === user.id) + 1 || '-';
+  // ...
+}
+```
+
+- En el ranking general, la vista `ranking_general_completo` expone `equipo_id` (no `id`) → `r.id` es siempre `undefined`.
+- En el ranking semanal, `r.id` se aliasa desde `equipo_fantasy_id` (no de `usuario_id`).
+- `user.id` viene de `UserRepository.findAllActive()` y es `usuarios.id`.
+
+Resultado: el `findIndex` no matchea jamás → la línea "Tu posición: X" siempre muestra `-`, y la fila del usuario en la tabla nunca se resalta. Adicionalmente, el HTML usaba `r.puntos` (ahora inexistente) y `r.nombre` (no devuelto por la vista).
+
+**Fix aplicado:**
+1. Comparación unificada por **email** (BUG 16 ya incluye `email` en la query semanal; la vista `ranking_general_completo` ya lo expone):
+   ```javascript
+   const isMe = (r) => r.email === user.email;
+   const userPositionGeneral = generalRanking.findIndex(isMe) + 1 || '-';
+   const userPositionWeekly  = weeklyRanking.findIndex(isMe) + 1 || '-';
+   ```
+2. Resaltado de fila y campos de nombre/puntos normalizados con fallback a los aliases reales de la vista (`r.usuario || r.usuario_nombre || r.nombre`, `r.puntos_totales || r.total_puntos || 0`).
+
+### Verificación end-to-end de la auditoría v1.5
+
+- ✅ La SQL corregida del BUG 16 ejecuta sin errores contra la DB restaurada.
+- ✅ `npm test` sigue en **112/112 passing** después de los 3 fixes (no se rompió ningún caso existente).
+- ✅ El smoke-test de conexión backend → DB (`SELECT COUNT(*) FROM jugadores` = 365) sigue funcionando.
+
+### Observación menor (no-bug)
+
+- **Índices redundantes en `equipos_lnb`:** existen dos índices únicos parciales sobre `api_basketball_id` (`idx_equipos_lnb_api_basketball_id` e `idx_equipos_lnb_api_id`). No rompe nada y `ON CONFLICT (api_basketball_id) WHERE api_basketball_id IS NOT NULL` funciona, pero conviene dropear uno en una migración futura.
 
 ---
 

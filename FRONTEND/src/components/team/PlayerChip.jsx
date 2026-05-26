@@ -1,50 +1,40 @@
-import { Crown, ChevronDown, Trash2 } from 'lucide-react'
+import { Crown, Trash2 } from 'lucide-react'
 
-// Posición → colores
-const POS_COLORS = {
+/**
+ * Paleta de posiciones unificada con Badge (misma estructura: 10% opacity + ring 20%).
+ * Acentos de hue diferentes pero saturación equivalente — diferenciación tenue, no gritona.
+ */
+const POS_STYLES = {
   base: {
-    bg: 'bg-blue-600',
-    bgLight: 'bg-blue-900/40',
-    text: 'text-blue-300',
-    ring: 'ring-blue-400/50',
-    dot: 'bg-blue-400',
+    chip: 'bg-sky-500/10 ring-sky-500/30 text-sky-700 dark:text-sky-300',
+    dot:  'bg-sky-500',
   },
   escolta: {
-    bg: 'bg-purple-600',
-    bgLight: 'bg-purple-900/40',
-    text: 'text-purple-300',
-    ring: 'ring-purple-400/50',
-    dot: 'bg-purple-400',
+    chip: 'bg-indigo-500/10 ring-indigo-500/30 text-indigo-700 dark:text-indigo-300',
+    dot:  'bg-indigo-500',
   },
   alero: {
-    bg: 'bg-green-600',
-    bgLight: 'bg-green-900/40',
-    text: 'text-green-300',
-    ring: 'ring-green-400/50',
-    dot: 'bg-green-400',
+    chip: 'bg-emerald-500/10 ring-emerald-500/30 text-emerald-700 dark:text-emerald-300',
+    dot:  'bg-emerald-500',
   },
   'ala-pivot': {
-    bg: 'bg-orange-600',
-    bgLight: 'bg-orange-900/40',
-    text: 'text-orange-300',
-    ring: 'ring-orange-400/50',
-    dot: 'bg-orange-400',
+    chip: 'bg-amber-500/10 ring-amber-500/30 text-amber-700 dark:text-amber-300',
+    dot:  'bg-amber-500',
   },
   pivot: {
-    bg: 'bg-red-600',
-    bgLight: 'bg-red-900/40',
-    text: 'text-red-300',
-    ring: 'ring-red-400/50',
-    dot: 'bg-red-400',
+    chip: 'bg-rose-500/10 ring-rose-500/30 text-rose-700 dark:text-rose-300',
+    dot:  'bg-rose-500',
   },
 }
 
-// Devuelve el apellido (última palabra del nombre completo)
 function getLastName(fullName) {
   if (!fullName) return ''
   const parts = fullName.trim().split(/\s+/)
   return parts[parts.length - 1]
 }
+
+const fmtPrice = (n) =>
+  typeof n === 'number' ? `$${(n / 1_000_000).toFixed(1)}M` : '—'
 
 export function PlayerChip({
   player,
@@ -56,19 +46,19 @@ export function PlayerChip({
   isBench = false,
   tooltipAlign = 'right',
 }) {
-  const colors = POS_COLORS[position] || POS_COLORS.base
-  const posLabel =
-    position.charAt(0).toUpperCase() + position.slice(1).replace('-', ' ')
+  const styles = POS_STYLES[position] || POS_STYLES.base
+  const posLabel = position.charAt(0).toUpperCase() + position.slice(1).replace('-', ' ')
   const apellido = getLastName(player.nombre)
   const isCaptain = !!player.es_capitan
 
-  const getTooltipClasses = () => {
-    if (tooltipAlign === 'left') return 'right-full mr-2'
-    if (tooltipAlign === 'auto') return 'left-1/2 -translate-x-1/2 bottom-full mb-2'
-    return 'left-full ml-2'
-  }
+  const tooltipPos =
+    tooltipAlign === 'left'
+      ? 'right-full mr-2 top-1/2 -translate-y-1/2'
+      : tooltipAlign === 'auto'
+        ? 'left-1/2 -translate-x-1/2 bottom-full mb-2'
+        : 'left-full ml-2 top-1/2 -translate-y-1/2'
 
-  // Handler común: detiene la propagación para evitar conflicto con drag
+  // Detener propagación para no interferir con drag listeners
   const stopAnd = (fn) => (e) => {
     e.stopPropagation()
     e.preventDefault()
@@ -77,97 +67,106 @@ export function PlayerChip({
 
   return (
     <div className="group relative">
-      {/* Compact Chip */}
       <div
-        className={`${colors.bgLight} border ${colors.ring} ring-1 rounded-lg p-2 transition-all ${isBench ? 'w-20' : 'w-28'} ${isCaptain ? 'ring-2 ring-yellow-400/70' : ''}`}
+        className={`
+          ${styles.chip}
+          ring-1 ring-inset rounded-lg p-2 transition-all
+          ${isBench ? 'w-20' : 'w-24 sm:w-28'}
+          ${isCaptain ? 'ring-2 ring-brand-500/70 shadow-soft' : ''}
+        `}
       >
-        {/* Header: position + captain badge */}
         <div className="flex items-center justify-between gap-1 mb-1">
           <div className="flex items-center gap-1 min-w-0">
-            <div className={`w-2 h-2 rounded-full shrink-0 ${colors.dot}`} />
-            <span className={`text-[10px] font-bold uppercase ${colors.text} truncate`}>
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${styles.dot}`} />
+            <span className="text-[10px] font-semibold uppercase tracking-wide truncate">
               {isBench ? position.slice(0, 3) : posLabel}
             </span>
           </div>
           {isCaptain && (
-            <Crown className="h-3 w-3 text-yellow-400 shrink-0" fill="currentColor" />
+            <Crown className="h-3 w-3 text-brand-500 shrink-0" fill="currentColor" aria-label="Capitán" />
           )}
         </div>
 
-        {/* Apellido del jugador */}
-        <p className="text-xs text-white font-semibold truncate" title={player.nombre}>
-          {apellido}
+        <p
+          className="text-xs font-semibold text-surface-900 dark:text-surface-50 truncate"
+          title={player.nombre}
+        >
+          {apellido || '—'}
         </p>
 
-        {/* Action buttons - pointer-events-auto para vencer el drag listener */}
-        <div className="flex gap-1 mt-1.5 pointer-events-auto" onPointerDown={(e) => e.stopPropagation()}>
+        <div
+          className="flex gap-1 mt-1.5 pointer-events-auto"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
           <button
             type="button"
             onClick={stopAnd(() => !marketLocked && onSetCaptain && onSetCaptain())}
             disabled={marketLocked || !player.es_titular}
-            className={`p-0.5 rounded transition disabled:opacity-30 disabled:cursor-not-allowed ${isCaptain ? 'bg-yellow-400/20' : 'hover:bg-white/10'}`}
+            className={`p-0.5 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
+              isCaptain
+                ? 'bg-brand-500/20 text-brand-600 dark:text-brand-400'
+                : 'text-surface-500 hover:text-surface-700 hover:bg-surface-200/60 dark:text-surface-400 dark:hover:text-surface-200 dark:hover:bg-surface-700/40'
+            }`}
             title={isCaptain ? 'Quitar capitán' : (player.es_titular ? 'Hacer capitán' : 'Solo titulares pueden ser capitán')}
+            aria-label={isCaptain ? 'Quitar capitán' : 'Hacer capitán'}
           >
-            <Crown
-              className={`h-3 w-3 ${isCaptain ? 'text-yellow-400' : 'text-gray-500'}`}
-              fill={isCaptain ? 'currentColor' : 'none'}
-            />
+            <Crown className="h-3 w-3" fill={isCaptain ? 'currentColor' : 'none'} />
           </button>
           {onSell && (
             <button
               type="button"
               onClick={stopAnd(() => !marketLocked && onSell())}
               disabled={marketLocked}
-              className="p-0.5 hover:bg-red-500/20 rounded transition disabled:opacity-30 disabled:cursor-not-allowed"
+              className="p-0.5 rounded text-surface-500 hover:text-rose-600 hover:bg-rose-500/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed dark:text-surface-400 dark:hover:text-rose-400"
               title="Vender jugador"
+              aria-label="Vender jugador"
             >
-              <Trash2 className="h-3 w-3 text-gray-500 hover:text-red-400" />
+              <Trash2 className="h-3 w-3" />
             </button>
           )}
         </div>
       </div>
 
-      {/* Tooltip on hover (nombre completo + detalles) */}
+      {/* Tooltip detalle */}
       <div
-        className={`absolute ${getTooltipClasses()} hidden group-hover:block z-50 bg-gray-900 border border-gray-700 rounded-xl p-3 w-52 shadow-xl pointer-events-none`}
+        role="tooltip"
+        className={`absolute ${tooltipPos} hidden group-hover:block z-50 bg-white dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-xl p-3 w-52 shadow-soft-lg pointer-events-none`}
       >
         <div className="flex items-center gap-2 mb-2">
-          <div className={`w-3 h-3 rounded-full ${colors.dot}`} />
-          <span className={`text-xs font-bold uppercase ${colors.text}`}>
+          <span className={`w-2.5 h-2.5 rounded-full ${styles.dot}`} />
+          <span className={`text-xs font-semibold uppercase tracking-wide ${styles.chip.split(' ').find((c) => c.startsWith('text-')) || ''}`}>
             {posLabel}
           </span>
           {isCaptain && (
-            <Crown className="h-3.5 w-3.5 text-yellow-400" fill="currentColor" />
+            <Crown className="h-3.5 w-3.5 text-brand-500" fill="currentColor" aria-hidden="true" />
           )}
         </div>
 
-        {/* Nombre completo */}
-        <p className="text-sm font-semibold text-white mb-1">
+        <p className="text-sm font-semibold text-surface-900 dark:text-surface-50 mb-0.5">
           {player.nombre}
         </p>
-        <p className="text-xs text-gray-400 mb-2">
+        <p className="text-xs text-surface-500 dark:text-surface-400 mb-2">
           {player.equipo_nombre || player.nombre_equipo || player.equipo || '—'}
         </p>
 
-        <div className="flex items-center justify-between mb-2 text-xs">
-          <span className="text-brand-400 font-bold">
-            ${(player.precio || 0).toLocaleString('es-AR')}
+        <div className="flex items-center justify-between text-xs">
+          <span className="font-semibold tabular-nums text-surface-900 dark:text-surface-50">
+            {fmtPrice(player.precio)}
           </span>
           {player.puntos_promedio != null && (
-            <span className="text-gray-400">
+            <span className="text-surface-500 dark:text-surface-400 tabular-nums">
               {Number(player.puntos_promedio).toFixed(1)} pts
             </span>
           )}
         </div>
 
-        {marketLocked && (
-          <p className="text-xs text-red-400 mt-2 text-center">
+        {marketLocked ? (
+          <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-2 text-center">
             Jornada cerrada
           </p>
-        )}
-        {!marketLocked && (
-          <p className="text-[10px] text-gray-500 mt-1 text-center italic">
-            Arrastrá para cambiar de posición
+        ) : (
+          <p className="text-[10px] text-surface-500 dark:text-surface-500 mt-2 text-center italic">
+            Arrastrá para reubicar
           </p>
         )}
       </div>
