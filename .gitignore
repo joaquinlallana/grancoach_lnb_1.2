@@ -46,3 +46,10 @@ Desktop.ini
 BACKEND/backup/*.sql
 BACKEND/backup/*.dump
 *.dump
+
+# Claude Code
+.claude/
+.claude-code-config.json
+.claude-instructions.md
+CLAUDE.md
+skills/
